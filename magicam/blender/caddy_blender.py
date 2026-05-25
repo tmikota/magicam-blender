@@ -150,6 +150,61 @@ class MAGICAM_OT_caddy_select_control(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _key_bone(pbone, frame):
+    pbone.keyframe_insert("location", frame=frame)
+    if pbone.rotation_mode == "QUATERNION":
+        pbone.keyframe_insert("rotation_quaternion", frame=frame)
+    else:
+        pbone.keyframe_insert("rotation_euler", frame=frame)
+    pbone.keyframe_insert("scale", frame=frame)
+
+
+class MAGICAM_OT_caddy_camera_at_frame(bpy.types.Operator):
+    bl_idname = "magicam.caddy_camera_at_frame"
+    bl_label = "Camera at Playhead"
+    bl_description = "Select the camera whose shot covers the current frame"
+
+    def execute(self, context):
+        frame = context.scene.frame_current
+        best, best_start = None, None
+        for name, entry in _all_cameras().items():
+            try:
+                start = int(entry[3])
+            except (TypeError, ValueError):
+                continue
+            if start <= frame and (best_start is None or start > best_start):
+                best, best_start = name, start
+        if not best:
+            self.report({"WARNING"}, "No camera covers the current frame.")
+            return {"CANCELLED"}
+        context.scene.magicam_caddy.camera = best
+        return {"FINISHED"}
+
+
+class MAGICAM_OT_caddy_key_camera(bpy.types.Operator):
+    bl_idname = "magicam.caddy_key_camera"
+    bl_label = "Key Camera"
+    bl_description = "Insert keyframes on all camera controls at the current frame"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        st = context.scene.magicam_caddy
+        entry = _all_cameras().get(st.camera)
+        if not entry:
+            return {"CANCELLED"}
+        arm = entry[1]
+        prefix = st.camera.rsplit("MagiCam", 1)[0]
+        frame = context.scene.frame_current
+        keyed = 0
+        for suffix, _label, _tool in CONTROL_BONES:
+            pbone = arm.pose.bones.get(f"{prefix}{suffix}")
+            if pbone:
+                _key_bone(pbone, frame)
+                keyed += 1
+        self.report({"INFO"}, f"Keyed {keyed} control(s) at frame {frame}.")
+        return {"FINISHED"}
+
+
 class MAGICAM_OT_caddy_jump_frame(bpy.types.Operator):
     bl_idname = "magicam.caddy_jump_frame"
     bl_label = "Jump To Frame"
@@ -231,6 +286,7 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
             return
 
         layout.prop(st, "camera", text="Camera")
+        layout.operator("magicam.caddy_camera_at_frame", icon="TIME")
         if st.camera not in cameras:
             return
         _, arm, cam_dict, start, end = cameras[st.camera]
@@ -257,6 +313,7 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
                 op = crow.operator("magicam.caddy_select_control", text=label)
                 op.bone = f"{prefix}{suffix}"
                 op.tool = tool
+            col.operator("magicam.caddy_key_camera", icon="KEY_HLT")
 
         layout.prop(st, "lens", text="Lens")
 
@@ -289,6 +346,8 @@ _classes = (
     MagicamCaddyState,
     MAGICAM_OT_caddy_set_plane,
     MAGICAM_OT_caddy_select_control,
+    MAGICAM_OT_caddy_camera_at_frame,
+    MAGICAM_OT_caddy_key_camera,
     MAGICAM_OT_caddy_jump_frame,
     MAGICAM_OT_caddy_view_range,
     MAGICAM_OT_caddy_create_static,
