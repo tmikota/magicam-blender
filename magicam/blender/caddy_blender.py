@@ -17,8 +17,14 @@ from magicam.blender import scene as mpc_scene
 LENSES = ["16mm", "24mm", "35mm", "50mm", "85mm", "120mm", "200mm"]
 _LENS_LABELS = set(LENSES)
 
-# Camera rig control bones, outermost-first (suffix after the rig prefix, label).
-CONTROL_BONES = [("main", "Base"), ("dolly", "Dolly"), ("height", "Height"), ("tilt", "Tilt")]
+# Camera rig control bones: (suffix after the rig prefix, label, transform tool).
+# Translate controls activate the Move tool; tilt activates Rotate.
+CONTROL_BONES = [
+    ("main", "Base", "builtin.move"),
+    ("dolly", "Dolly", "builtin.move"),
+    ("height", "Height", "builtin.move"),
+    ("tilt", "Tilt", "builtin.rotate"),
+]
 
 # Keep a reference to the dynamic enum items so Blender doesn't GC the strings.
 _camera_enum_items = []
@@ -39,14 +45,6 @@ def _all_cameras():
     return cameras
 
 
-def _read_opacity(obj):
-    for slot in obj.material_slots:
-        mat = slot.material
-        if mat and mat.use_nodes:
-            for node in mat.node_tree.nodes:
-                if node.type == "BSDF_PRINCIPLED":
-                    return node.inputs["Alpha"].default_value
-    return 1.0
 
 
 def _to_int(value, fallback=0):
@@ -87,14 +85,8 @@ def _on_lens_update(self, context):
 
 def _on_opacity_update(self, context):
     obj = bpy.data.objects.get(self.active_plane)
-    if not obj:
-        return
-    for slot in obj.material_slots:
-        mat = slot.material
-        if mat and mat.use_nodes:
-            for node in mat.node_tree.nodes:
-                if node.type == "BSDF_PRINCIPLED":
-                    node.inputs["Alpha"].default_value = self.opacity
+    if obj:
+        mpc_ip.set_plane_opacity(obj, self.opacity)
 
 
 class MagicamCaddyState(bpy.types.PropertyGroup):
@@ -126,7 +118,7 @@ class MAGICAM_OT_caddy_set_plane(bpy.types.Operator):
         st.active_plane = self.plane
         obj = bpy.data.objects.get(self.plane)
         if obj:
-            st.opacity = _read_opacity(obj)
+            st.opacity = mpc_ip.get_plane_opacity(obj)
             armature, bone = mpc_scene.get_image_plane_bone(obj)
             if armature and bone:
                 try:
@@ -141,6 +133,7 @@ class MAGICAM_OT_caddy_select_control(bpy.types.Operator):
     bl_label = "Select Camera Control"
     bl_description = "Select this control bone on the active camera's rig (grab with G)"
     bone: bpy.props.StringProperty()
+    tool: bpy.props.StringProperty(default="builtin.move")
 
     def execute(self, context):
         st = context.scene.magicam_caddy
@@ -149,6 +142,11 @@ class MAGICAM_OT_caddy_select_control(bpy.types.Operator):
             return {"CANCELLED"}
         arm = entry[1]
         mpc_scene.select_bone_on_rig(arm, self.bone)
+        # Switch to the matching transform tool so non-Blender users can just drag.
+        try:
+            bpy.ops.wm.tool_set_by_id(name=self.tool)
+        except Exception as exc:
+            print(f"[magicam] could not set tool '{self.tool}': {exc}")
         return {"FINISHED"}
 
 
@@ -247,17 +245,18 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
         # Camera controls: select a rig control bone (ready to grab).
         prefix = st.camera.rsplit("MagiCam", 1)[0]
         controls = [
-            (suffix, label)
-            for suffix, label in CONTROL_BONES
+            (suffix, label, tool)
+            for suffix, label, tool in CONTROL_BONES
             if arm and arm.pose.bones.get(f"{prefix}{suffix}")
         ]
         if controls:
             col = layout.column(align=True)
             col.label(text="Camera Controls")
             crow = col.row(align=True)
-            for suffix, label in controls:
+            for suffix, label, tool in controls:
                 op = crow.operator("magicam.caddy_select_control", text=label)
                 op.bone = f"{prefix}{suffix}"
+                op.tool = tool
 
         layout.prop(st, "lens", text="Lens")
 

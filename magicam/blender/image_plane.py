@@ -76,6 +76,65 @@ def apply_static_image(plane, image_path, full_prefix, new_name=None):
     return plane
 
 
+_OPACITY_NODE = "magicam_opacity"
+
+
+def _ensure_opacity_node(mat):
+    """Insert/return a MULTIPLY node feeding Principled Alpha.
+
+    The image's alpha is multiplied by an opacity factor, so opacity fades the
+    plane while preserving its cutout alpha (a linked Alpha socket ignores its
+    own default_value, which is why setting Alpha directly does nothing).
+    """
+    if not mat or not mat.use_nodes:
+        return None
+    nt = mat.node_tree
+    principled = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if not principled:
+        return None
+    alpha_in = principled.inputs["Alpha"]
+    for link in alpha_in.links:
+        if link.from_node.name == _OPACITY_NODE:
+            return link.from_node
+
+    src_socket = alpha_in.links[0].from_socket if alpha_in.links else None
+    mult = nt.nodes.new("ShaderNodeMath")
+    mult.name = _OPACITY_NODE
+    mult.label = "MagiCam Opacity"
+    mult.operation = "MULTIPLY"
+    mult.inputs[1].default_value = 1.0
+    if src_socket:
+        nt.links.new(src_socket, mult.inputs[0])
+    else:
+        mult.inputs[0].default_value = 1.0
+    nt.links.new(mult.outputs[0], alpha_in)
+    return mult
+
+
+def set_plane_opacity(obj, value):
+    """Set overall opacity (0..1) on every material of an image plane."""
+    for slot in obj.material_slots:
+        node = _ensure_opacity_node(slot.material)
+        if node:
+            node.inputs[1].default_value = value
+
+
+def get_plane_opacity(obj):
+    """Read an image plane's opacity factor (1.0 if none set)."""
+    for slot in obj.material_slots:
+        mat = slot.material
+        if mat and mat.use_nodes:
+            node = mat.node_tree.nodes.get(_OPACITY_NODE)
+            if node:
+                return node.inputs[1].default_value
+            principled = next(
+                (n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None
+            )
+            if principled:
+                return principled.inputs["Alpha"].default_value
+    return 1.0
+
+
 def get_frame_numbers(image_path):
     """Sorted frame numbers of every "name.####.ext" file beside image_path."""
     folder = os.path.dirname(image_path)
