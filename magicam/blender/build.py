@@ -8,11 +8,21 @@ off by default, so this runs against the current .blend with no Alchemy install.
 from __future__ import annotations
 
 import os
+import re
 
 import bpy
 
 from magicam.blender import image_plane, rig, scene
 from magicam.tvpaint import query as tvp_query
+
+
+def shot_name_from_clip(clip_name: str) -> str:
+    """Derive a Blender-safe, uppercased shot name from a TVPaint clip name.
+
+    e.g. "Clip_139" -> "CLIP_139"; "Clip_134 - v2" -> "CLIP_134_V2".
+    """
+    cleaned = re.sub(r"[^A-Z0-9_]+", "_", clip_name.upper())
+    return cleaned.strip("_") or "CLIP"
 
 
 def _pipeline_pre(shot_name):
@@ -43,8 +53,9 @@ def import_multicam_rig(
     if enable_pipeline:
         _pipeline_pre(shot_name)
 
+    export = tvp_query.tvp_data(tvpaint_json)
     if not shot_name:
-        shot_name = "000_0000"
+        shot_name = shot_name_from_clip(export.clip.name)
 
     rig_collection = f"CAM_{shot_name}"
     scene_children = [c.name for c in bpy.context.scene.collection.children]
@@ -65,7 +76,6 @@ def import_multicam_rig(
     rig.namespace_everything(rig_collection_object, prefix)
     camera_name = f"{prefix}MagiCam"
 
-    export = tvp_query.tvp_data(tvpaint_json)
     start_frame, end_frame = export.clip.frame_range_from_layers()
     if not shot_start_frame:
         shot_start_frame = start_frame or 1

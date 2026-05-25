@@ -19,8 +19,11 @@ class MAGICAM_OT_import_tvpaint(bpy.types.Operator, ImportHelper):
 
     shot_name: bpy.props.StringProperty(
         name="Shot Name",
-        description="Prefix/namespace for the rig (e.g. SEQ_0010)",
-        default="SHOT_0010",
+        description=(
+            "Prefix/namespace for the rig. Leave blank to use the TVPaint clip "
+            "name, uppercased (e.g. CLIP_139)."
+        ),
+        default="",
     )
     shot_start_frame: bpy.props.IntProperty(
         name="Shot Start Frame",

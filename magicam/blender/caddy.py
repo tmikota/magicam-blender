@@ -256,7 +256,7 @@ class CameraImportUI(QtWidgets.QDialog):
         self.file_path_edit = QtWidgets.QLineEdit()
         self.file_path_edit.setPlaceholderText("Select TVPaint .json file")
         self.shot_name_edit = QtWidgets.QLineEdit()
-        self.shot_name_edit.setText("SHOT_0010")
+        self.shot_name_edit.setPlaceholderText("blank = clip name, e.g. CLIP_139")
 
         self.browse_button = QtWidgets.QToolButton()
         self.browse_button.setText("...")
