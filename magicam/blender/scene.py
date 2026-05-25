@@ -323,15 +323,48 @@ def get_character_rig_c_pose(name_fragment):
 
 
 def get_image_plane_bone(image_plane_object):
-    """Return (armature_object, bone_name) of an image plane's Armature constraint."""
+    """Return (armature_object, bone_name) of the control bone driving a plane.
+
+    Tries the common rig bindings in order: Armature constraint, Child-Of
+    constraint, bone parenting, then an Armature modifier matched to a vertex
+    group whose name is a bone. Returns (None, None) if nothing matches.
+    """
     if isinstance(image_plane_object, str):
         image_plane_object = bpy.data.objects.get(image_plane_object)
     if not image_plane_object:
         return None, None
-    for constraint in image_plane_object.constraints:
-        if constraint.type == "ARMATURE":
-            target = constraint.targets[0] if constraint.targets else None
-            if target:
-                return target.target, target.subtarget
-            return None, None
+
+    # 1) Armature (bone) constraint with a bone target.
+    for c in image_plane_object.constraints:
+        if c.type == "ARMATURE" and c.targets:
+            t = c.targets[0]
+            if t and t.target and t.subtarget:
+                return t.target, t.subtarget
+
+    # 2) Child Of constraint pointing at a bone.
+    for c in image_plane_object.constraints:
+        if c.type == "CHILD_OF" and c.target and getattr(c, "subtarget", ""):
+            return c.target, c.subtarget
+
+    # 3) Bone parenting.
+    if (
+        image_plane_object.parent
+        and image_plane_object.parent.type == "ARMATURE"
+        and image_plane_object.parent_type == "BONE"
+        and image_plane_object.parent_bone
+    ):
+        return image_plane_object.parent, image_plane_object.parent_bone
+
+    # 4) Armature modifier + a vertex group that names a bone.
+    arm = next(
+        (m.object for m in image_plane_object.modifiers
+         if m.type == "ARMATURE" and m.object),
+        None,
+    )
+    if arm:
+        bone_names = {b.name for b in arm.data.bones}
+        for vg in image_plane_object.vertex_groups:
+            if vg.name in bone_names:
+                return arm, vg.name
+
     return None, None
