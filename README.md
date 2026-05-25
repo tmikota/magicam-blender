@@ -47,3 +47,42 @@ query.frame_range_from_layers(path_or_dict_or_model)
 query.layer_images(path, "Anim_19")   # absolute image paths
 ```
 
+## Blender add-on (`magicam.blender`)
+
+A PySide-free Blender add-on that builds a multiplane camera rig from a TVPaint
+export. The camera rig template is bundled in `magicam/blender/resources/`.
+
+### Loading it
+
+The repo must be on Blender's `sys.path`. From Blender's Python console or a
+Text-editor script:
+
+```python
+import sys; sys.path.append(r"C:\Users\tmiko\PycharmProjects\magicam-blender")
+import magicam.blender as mb
+mb.register()   # adds the "MagiCam" tab to the 3D viewport sidebar (N)
+```
+
+The panel has an **Import TVPaint Camera** button (pick a `clip_export.json`,
+set a shot name) and lists each rig's image planes with visibility toggles.
+
+You can also drive it headlessly:
+
+```python
+from magicam.blender import build
+build.import_multicam_rig(r"...\clip_export.json", shot_name="SEQ_0010")
+```
+
+### Scope and known limitations of this first cut
+
+- **Untested outside Blender.** The `magicam.blender` modules import `bpy`; they
+  pass a syntax check here but must be verified inside Blender.
+- **Import + plane-list panel only.** Character-snapping, per-plane
+  opacity/move/rotate, lens control, "create static", and the thumbnail strip
+  from the old Qt "Camera Caddy" are not ported yet.
+- **10 planes.** The bundled rig provides `image_plane_01..10`; layers beyond the
+  10th are skipped with a console note.
+- **Pipeline seam off by default.** Alchemy hooks (task structure, etc.) only run
+  when *Enable Alchemy pipeline steps* is ticked in the add-on preferences and the
+  `alc` package is importable.
+
