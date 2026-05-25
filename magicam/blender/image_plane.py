@@ -12,6 +12,26 @@ import re
 import bpy
 
 
+def _set_transparent_material(mat):
+    """Configure alpha-blended transparency across Blender 4.0-4.1 and 4.2+ (EEVEE Next).
+
+    4.0/4.1 use Material.blend_method/shadow_method; 4.2+ replaced those with
+    surface_render_method and use_transparent_shadow.
+    """
+    if hasattr(mat, "blend_method"):
+        mat.blend_method = "BLEND"
+    elif hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = "BLENDED"
+
+    if hasattr(mat, "shadow_method"):
+        mat.shadow_method = "CLIP"
+    elif hasattr(mat, "use_transparent_shadow"):
+        mat.use_transparent_shadow = True
+
+    if hasattr(mat, "use_backface_culling"):
+        mat.use_backface_culling = False
+
+
 def get_frame_numbers(image_path):
     """Sorted frame numbers of every "name.####.ext" file beside image_path."""
     folder = os.path.dirname(image_path)
@@ -160,9 +180,7 @@ def import_layer_to_image_plane(plane, image_path, full_prefix, sequence=True, c
     tex_node = nodes.new(type="ShaderNodeTexImage")
     tex_node.image = image
 
-    mat.blend_method = "BLEND"
-    mat.shadow_method = "CLIP"
-    mat.use_backface_culling = False
+    _set_transparent_material(mat)
 
     links.new(tex_node.outputs["Color"], shader_node.inputs["Base Color"])
     links.new(tex_node.outputs["Alpha"], shader_node.inputs["Alpha"])

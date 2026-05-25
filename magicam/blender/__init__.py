@@ -29,6 +29,11 @@ _classes = (prefs.MagicamPreferences, *ops.classes, *panels.classes)
 
 def register():
     for cls in _classes:
+        # Tolerate a re-run in the same session (re-register cleanly).
+        try:
+            bpy.utils.unregister_class(cls)
+        except Exception:
+            pass
         bpy.utils.register_class(cls)
 
 
@@ -40,4 +45,7 @@ def unregister():
     except Exception:
         pass
     for cls in reversed(_classes):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except Exception:
+            pass
