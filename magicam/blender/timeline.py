@@ -94,8 +94,9 @@ def _audio_strips(timeline):
     if not scn.sequence_editor:
         scn.sequence_editor_create()
     se = scn.sequence_editor
-    # Blender 5.x renamed sequences -> strips; support both.
-    strips = getattr(se, "strips", None) or se.sequences
+    # Blender 5.x renamed sequences -> strips. Check existence rather than using
+    # `or`, since an empty collection is falsy and would wrongly fall through.
+    strips = se.strips if hasattr(se, "strips") else se.sequences
 
     added = 0
     for clip, abs_start, _dur in timeline.audio_clips():
