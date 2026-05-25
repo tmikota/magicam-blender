@@ -16,7 +16,9 @@ class MAGICAM_PT_main(bpy.types.Panel):
     bl_category = "MagiCam"
 
     def draw(self, context):
-        self.layout.operator("magicam.import_tvpaint", icon="OUTLINER_OB_CAMERA")
+        col = self.layout.column(align=True)
+        col.operator("magicam.import_tvpaint", icon="OUTLINER_OB_CAMERA")
+        col.operator("magicam.import_timeline", icon="SEQUENCE")
 
 
 classes = (MAGICAM_PT_main,)

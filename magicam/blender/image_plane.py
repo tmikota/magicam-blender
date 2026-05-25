@@ -32,6 +32,50 @@ def _set_transparent_material(mat):
         mat.use_backface_culling = False
 
 
+def _build_transparent_image_material(image, material_name):
+    """A Principled material wired for an alpha-blended image (Color + Alpha)."""
+    mat = bpy.data.materials.new(name=material_name)
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    output_node = nodes.new(type="ShaderNodeOutputMaterial")
+    shader_node = nodes.new(type="ShaderNodeBsdfPrincipled")
+    tex_node = nodes.new(type="ShaderNodeTexImage")
+    tex_node.image = image
+
+    _set_transparent_material(mat)
+
+    links.new(tex_node.outputs["Color"], shader_node.inputs["Base Color"])
+    links.new(tex_node.outputs["Alpha"], shader_node.inputs["Alpha"])
+    links.new(shader_node.outputs["BSDF"], output_node.inputs["Surface"])
+    return mat
+
+
+def apply_static_image(plane, image_path, full_prefix, new_name=None):
+    """Put a single still image (not a sequence) on a plane with a transparent material.
+
+    Used for Alchemy storyboards, which are single flattened PNGs. Returns the
+    plane, or None if the image is missing.
+    """
+    if not os.path.exists(image_path):
+        print(f"Image not found: {image_path}")
+        return None
+    if new_name:
+        plane.name = new_name
+
+    base = os.path.splitext(os.path.basename(image_path))[0]
+    image = bpy.data.images.load(image_path, check_existing=False)
+    image.name = f"{full_prefix}{base}_img"
+    image.source = "FILE"
+
+    mat = _build_transparent_image_material(image, f"{full_prefix}{base}_mat")
+    plane.data.materials.append(mat)
+    plane.hide_select = True
+    return plane
+
+
 def get_frame_numbers(image_path):
     """Sorted frame numbers of every "name.####.ext" file beside image_path."""
     folder = os.path.dirname(image_path)

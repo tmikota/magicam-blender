@@ -47,6 +47,32 @@ class MAGICAM_OT_import_tvpaint(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
+class MAGICAM_OT_import_timeline(bpy.types.Operator, ImportHelper):
+    bl_idname = "magicam.import_timeline"
+    bl_label = "Import Alchemy Timeline"
+    bl_description = (
+        "Build a camera per storyboard + audio strips from an Alchemy "
+        "scene_*_timeline.json (requires the alc package)"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    filename_ext = ".json"
+    filter_glob: bpy.props.StringProperty(default="*.json", options={"HIDDEN"})
+
+    def execute(self, context):
+        try:
+            from magicam.blender import timeline
+        except ImportError as exc:
+            self.report({"ERROR"}, f"Alchemy (alc) not importable: {exc}")
+            return {"CANCELLED"}
+        built, audio = timeline.import_alchemy_timeline(self.filepath)
+        if not built and not audio:
+            self.report({"WARNING"}, "Nothing imported (see console).")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Built {built} storyboard cameras, {audio} audio strips.")
+        return {"FINISHED"}
+
+
 class MAGICAM_OT_toggle_plane(bpy.types.Operator):
     bl_idname = "magicam.toggle_plane"
     bl_label = "Toggle Image Plane"
@@ -63,4 +89,8 @@ class MAGICAM_OT_toggle_plane(bpy.types.Operator):
         return {"FINISHED"}
 
 
-classes = (MAGICAM_OT_import_tvpaint, MAGICAM_OT_toggle_plane)
+classes = (
+    MAGICAM_OT_import_tvpaint,
+    MAGICAM_OT_import_timeline,
+    MAGICAM_OT_toggle_plane,
+)

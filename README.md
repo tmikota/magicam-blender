@@ -91,6 +91,28 @@ and save/load. No PySide6 anywhere in the package.
 Deferred for now: the thumbnail strip (would use `bpy.utils.previews`),
 move/rotate nudges, and character-snap.
 
+### Alchemy timelines
+
+magicam can also build a scene from an Alchemy edit timeline
+(`scene_*_timeline.json`) — the **Import Alchemy Timeline** button in the MagiCam
+panel.
+
+- `magicam.alchemy` is a pure pydantic reader for the timeline (tracks → clips,
+  with absolute-frame-offset helpers; Gaps advance the cursor). No `bpy`, no
+  `alc` — validate it with `validate_timeline.py`.
+- `magicam/blender/timeline.py` translates it: each **storyboard Image** clip
+  becomes its own camera rig (one image plane) placed at its absolute frame with
+  a marker, so the camera-switch handler plays the boards in sequence; plane
+  visibility is keyed to each board's span. **Audio** clips become VSE sound
+  strips. The boards show up in the **Camera Caddy** like any other rig.
+- Storyboard/audio paths are resolved with `alc.path.media_to_abs`, so this
+  feature **requires Alchemy** — but only in the Blender translator (imported
+  lazily, so the add-on still registers without `alc`). The pure model has no
+  `alc` dependency.
+
+One board = one image plane today; mapping a board's PSD layers onto the rig's
+multiple planes is a future enhancement.
+
 ### Known limitations
 
 - **Verify in Blender.** The `magicam.blender` modules import `bpy`; they pass a
