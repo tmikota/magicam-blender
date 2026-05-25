@@ -73,6 +73,24 @@ from magicam.blender import build
 build.import_multicam_rig(r"...\clip_export.json", shot_name="SEQ_0010")
 ```
 
+### Camera Caddy (PySide6)
+
+The original PySide6 "Camera Caddy" is ported in `magicam/blender/caddy.py` and
+wired to the new architecture. It's the practical way to drive a rig (shots /
+cameras / planes, visibility, lens, frame jumps, create-static, character-snap).
+Open it from the **MagiCam** panel ("Open Camera Caddy") or:
+
+```python
+from magicam.blender import caddy
+caddy.launch_caddy()            # manage rigs in the scene
+caddy.launch_camera_importer()  # the import dialog
+```
+
+This still requires **PySide6 in Blender's Python** (a native bpy rebuild is
+deferred). If PySide6 is missing the rest of the add-on still loads — only the
+Caddy buttons report it. If the Caddy window is unresponsive, that's the usual
+Qt-event-loop-in-Blender issue and we can add a modal event pump.
+
 ### Scope and known limitations of this first cut
 
 - **Untested outside Blender.** The `magicam.blender` modules import `bpy`; they

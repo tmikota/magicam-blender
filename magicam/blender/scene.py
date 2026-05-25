@@ -233,3 +233,105 @@ def enable_multicam_playback():
 def disable_multicam_playback():
     if _camera_marker_switcher in bpy.app.handlers.frame_change_pre:
         bpy.app.handlers.frame_change_pre.remove(_camera_marker_switcher)
+
+
+def set_current_frame(frame_number):
+    bpy.context.scene.frame_current = int(frame_number)
+
+
+# --- rig / bone selection (used by the Camera Caddy) -----------------------
+
+def select_rig_root(rig_name, root_bone_name):
+    """Select a rig and its root bone, entering Pose mode. Self-contained."""
+    rig = bpy.data.objects.get(rig_name)
+    if not rig or rig.type != "ARMATURE":
+        print(f"Rig '{rig_name}' not found or not an armature.")
+        return
+    if rig.library or rig.override_library:
+        print(f"Rig '{rig_name}' is linked/overridden; cannot select.")
+        return
+    try:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = rig
+    rig.select_set(True)
+    if rig.mode != "POSE":
+        try:
+            bpy.ops.object.mode_set(mode="POSE")
+        except RuntimeError as exc:
+            print(f"Could not enter Pose mode: {exc}")
+            return
+    for bone in rig.data.bones:
+        bone.select = False
+    if root_bone_name in rig.pose.bones:
+        rig.data.bones.active = rig.data.bones[root_bone_name]
+        rig.data.bones[root_bone_name].select = True
+    else:
+        print(f"Bone '{root_bone_name}' not found on '{rig_name}'.")
+
+
+def select_bone_on_rig(rig_object, bone_name):
+    """Select a single pose bone by name on the given armature."""
+    if isinstance(rig_object, str):
+        rig_object = bpy.data.objects.get(rig_object)
+    if not rig_object or rig_object.type != "ARMATURE":
+        print("Provided object is not an armature.")
+        return
+    if rig_object.mode != "POSE":
+        try:
+            bpy.context.view_layer.objects.active = rig_object
+            rig_object.select_set(True)
+            bpy.ops.object.mode_set(mode="POSE")
+        except RuntimeError as exc:
+            print(f"Failed to switch to Pose mode: {exc}")
+            return
+    pbone = rig_object.pose.bones.get(bone_name)
+    if not pbone:
+        print(f"Bone '{bone_name}' not found on '{rig_object.name}'.")
+        return
+    for b in rig_object.data.bones:
+        b.select = False
+    rig_object.data.bones.active = pbone.bone
+    pbone.bone.select = True
+
+
+def select_camera_root(camera_rig_name):
+    root_bone_name = camera_rig_name.replace("MagiControlRig", "main")
+    select_rig_root(camera_rig_name, root_bone_name)
+
+
+def select_image_plane(rig_object, image_plane_control_name):
+    select_bone_on_rig(rig_object, image_plane_control_name)
+
+
+def select_character_rig(character_rig_name):
+    select_rig_root(character_rig_name, "c_pose")
+
+
+def get_character_rig_c_pose(name_fragment):
+    """Find the 'c_pos' pose bone of an armature in a collection matching the fragment."""
+    for collection in bpy.data.collections:
+        if name_fragment.lower() in collection.name.lower():
+            for obj in collection.all_objects:
+                if obj.type == "ARMATURE":
+                    return obj.pose.bones.get("c_pos")
+            return None
+    return None
+
+
+def get_image_plane_bone(image_plane_object):
+    """Return (armature_object, bone_name) of an image plane's Armature constraint."""
+    if isinstance(image_plane_object, str):
+        image_plane_object = bpy.data.objects.get(image_plane_object)
+    if not image_plane_object:
+        return None, None
+    for constraint in image_plane_object.constraints:
+        if constraint.type == "ARMATURE":
+            target = constraint.targets[0] if constraint.targets else None
+            if target:
+                return target.target, target.subtarget
+            return None, None
+    return None, None

@@ -16,7 +16,10 @@ class MAGICAM_PT_main(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("magicam.import_tvpaint", icon="OUTLINER_OB_CAMERA")
+        layout.operator("magicam.open_caddy", icon="WINDOW")
+        row = layout.row(align=True)
+        row.operator("magicam.import_tvpaint", text="Import (file browser)", icon="OUTLINER_OB_CAMERA")
+        row.operator("magicam.open_importer", text="Import (Caddy)", icon="WINDOW")
 
         armatures = scene.get_multicam_armatures()
         if not armatures:

@@ -198,3 +198,82 @@ def import_layer_to_image_plane(plane, image_path, full_prefix, sequence=True, c
 
     plane.hide_select = True
     return plane, plane_dict
+
+
+def static_image_plane(image_plane_object):
+    """Duplicate a SEQUENCE-based plane as a standalone plane showing the current frame."""
+    if (
+        not image_plane_object
+        or not image_plane_object.data
+        or not image_plane_object.data.materials
+    ):
+        raise ValueError("Image plane must have at least one material.")
+
+    new_obj = image_plane_object.copy()
+    new_obj.data = image_plane_object.data.copy()
+    new_obj.name = f"{image_plane_object.name}_static"
+    new_obj.matrix_world = image_plane_object.matrix_world.copy()
+    new_obj.parent = None
+    new_obj.matrix_parent_inverse.identity()
+    new_obj.constraints.clear()
+
+    if new_obj.animation_data and new_obj.animation_data.drivers:
+        for fcurve in list(new_obj.animation_data.drivers):
+            new_obj.driver_remove(fcurve.data_path, fcurve.array_index)
+
+    mat = new_obj.data.materials[0]
+    if mat and mat.use_nodes:
+        image_node = next(
+            (n for n in mat.node_tree.nodes if n.type == "TEX_IMAGE"), None
+        )
+        static_image = query_current_image_from_sequence(image_node)
+        if static_image:
+            set_image_plane_to_single_image(image_node, static_image)
+
+    for coll in image_plane_object.users_collection:
+        coll.objects.link(new_obj)
+    new_obj.hide_select = False
+    return new_obj
+
+
+def query_current_image_from_sequence(image_node):
+    """Load the single image shown at the current frame for a SEQUENCE texture node."""
+    if not image_node or not image_node.image or image_node.image.source != "SEQUENCE":
+        print("Not a valid sequence image node.")
+        return None
+
+    img = image_node.image
+    user = image_node.image_user
+    scene_frame = bpy.context.scene.frame_current
+    total_frames = user.frame_duration or img.frame_duration
+    frame_idx = scene_frame - user.frame_start + user.frame_offset
+    if frame_idx < 0 or frame_idx >= total_frames:
+        print(f"Frame {scene_frame} out of range (index {frame_idx}).")
+        return None
+
+    filepath = bpy.path.abspath(img.filepath)
+    directory = os.path.dirname(filepath)
+    base, ext = os.path.splitext(os.path.basename(filepath))
+    digits = "".join(filter(str.isdigit, base))
+    pad = len(digits) if digits else 4
+    base_no_digits = base[:-pad] if digits else base
+    frame_str = str(frame_idx + 1).zfill(pad)
+    static_path = os.path.join(directory, f"{base_no_digits}{frame_str}{ext}")
+
+    try:
+        return bpy.data.images.load(static_path)
+    except Exception as exc:
+        print(f"Failed to load image '{static_path}': {exc}")
+        return None
+
+
+def set_image_plane_to_single_image(image_node, static_image):
+    """Switch a texture node from SEQUENCE to a single static image."""
+    if not image_node or not static_image:
+        return
+    image_node.image = static_image
+    image_node.image.source = "FILE"
+    image_node.image_user.use_auto_refresh = False
+    image_node.image_user.frame_offset = 0
+    image_node.image_user.frame_duration = 1
+    image_node.image_user.frame_start = 1
