@@ -1,9 +1,10 @@
-"""Native bpy Camera Caddy — a PySide-free alternative to caddy.py.
+"""Native bpy Camera Caddy — the Blender UI for MagiCam rigs (no PySide).
 
 Immediate-mode N-panel: selection state lives in a Scene PropertyGroup, and the
-shots/cameras/planes are read from each rig armature's stored multicam_data on
-every redraw. Covers the core set (lists, visibility, lens, frame jumps, opacity,
-create-static). Thumbnails, move/rotate, and character-snap are deferred.
+cameras/planes are read from each rig armature's stored multicam_data on every
+redraw. One shot == one camera, so cameras are listed directly (no shot list) as
+a dropdown. Clicking a plane selects its rig control bone.
+Deferred: thumbnail strip, move/rotate, character-snap.
 """
 
 from __future__ import annotations
@@ -16,24 +17,23 @@ from magicam.blender import scene as mpc_scene
 LENSES = ["16mm", "24mm", "35mm", "50mm", "85mm", "120mm", "200mm"]
 _LENS_LABELS = set(LENSES)
 
+# Keep a reference to the dynamic enum items so Blender doesn't GC the strings.
+_camera_enum_items = []
+
 
 # --- shared data access ----------------------------------------------------
 
-def _all_shots():
-    """Ordered {shot_name: camera_data} for every MagiCam rig in the scene."""
-    shots = {}
+def _all_cameras():
+    """{camera_name: (shot, armature, camera_dict, start, end)} across all rigs."""
+    cameras = {}
     for arm in mpc_scene.get_multicam_armatures():
         data = mpc_scene.load_camera_data_from_armature(arm)
-        shots[data.get("shot_name", arm.name)] = data
-    return shots
-
-
-def _arm_for_shot(shot_name):
-    for arm in mpc_scene.get_multicam_armatures():
-        data = mpc_scene.load_camera_data_from_armature(arm)
-        if data.get("shot_name", arm.name) == shot_name:
-            return arm
-    return None
+        shot = data.get("shot_name", arm.name)
+        start = data.get("start_frame", 0)
+        end = data.get("end_frame", 0)
+        for cam_name, cam_dict in data.get("cameras", {}).items():
+            cameras[cam_name] = (shot, arm, cam_dict, start, end)
+    return cameras
 
 
 def _read_opacity(obj):
@@ -46,12 +46,38 @@ def _read_opacity(obj):
     return 1.0
 
 
-# --- property update callbacks ---------------------------------------------
+def _to_int(value, fallback=0):
+    return int(value) if str(value).lstrip("-").isdigit() else fallback
+
+
+# --- dynamic enum / update callbacks ---------------------------------------
+
+def _camera_items(self, context):
+    global _camera_enum_items
+    names = list(_all_cameras().keys())
+    _camera_enum_items = [(n, n, "") for n in names] or [("", "(no cameras)", "")]
+    return _camera_enum_items
+
+
+def _on_camera_update(self, context):
+    self.active_plane = ""
+    if not self.camera:
+        return
+    cam = mpc_scene.camera_object(self.camera)
+    if cam and cam.type == "CAMERA":
+        label = f"{int(round(cam.data.lens))}mm"
+        if label in _LENS_LABELS:
+            self.lens = label
+    try:
+        mpc_scene.select_camera_root(self.camera.replace("Cam", "ControlRig"))
+    except Exception as exc:
+        print(f"[magicam] camera select skipped: {exc}")
+
 
 def _on_lens_update(self, context):
-    if not self.active_camera:
+    if not self.camera:
         return
-    cam = mpc_scene.camera_object(self.active_camera)
+    cam = mpc_scene.camera_object(self.camera)
     if cam and cam.type == "CAMERA":
         cam.data.lens = float(self.lens.replace("mm", ""))
 
@@ -69,8 +95,9 @@ def _on_opacity_update(self, context):
 
 
 class MagicamCaddyState(bpy.types.PropertyGroup):
-    active_shot: bpy.props.StringProperty()
-    active_camera: bpy.props.StringProperty()
+    camera: bpy.props.EnumProperty(
+        name="Camera", items=_camera_items, update=_on_camera_update
+    )
     active_plane: bpy.props.StringProperty()
     lens: bpy.props.EnumProperty(
         name="Lens",
@@ -85,43 +112,10 @@ class MagicamCaddyState(bpy.types.PropertyGroup):
 
 # --- operators -------------------------------------------------------------
 
-class MAGICAM_OT_caddy_set_shot(bpy.types.Operator):
-    bl_idname = "magicam.caddy_set_shot"
-    bl_label = "Select Shot"
-    shot: bpy.props.StringProperty()
-
-    def execute(self, context):
-        st = context.scene.magicam_caddy
-        st.active_shot = self.shot
-        st.active_camera = ""
-        st.active_plane = ""
-        return {"FINISHED"}
-
-
-class MAGICAM_OT_caddy_set_camera(bpy.types.Operator):
-    bl_idname = "magicam.caddy_set_camera"
-    bl_label = "Select Camera"
-    camera: bpy.props.StringProperty()
-
-    def execute(self, context):
-        st = context.scene.magicam_caddy
-        st.active_camera = self.camera
-        st.active_plane = ""
-        cam = mpc_scene.camera_object(self.camera)
-        if cam and cam.type == "CAMERA":
-            label = f"{int(round(cam.data.lens))}mm"
-            if label in _LENS_LABELS:
-                st.lens = label
-        try:
-            mpc_scene.select_camera_root(self.camera.replace("Cam", "ControlRig"))
-        except Exception as exc:
-            print(f"[magicam] camera select skipped: {exc}")
-        return {"FINISHED"}
-
-
 class MAGICAM_OT_caddy_set_plane(bpy.types.Operator):
     bl_idname = "magicam.caddy_set_plane"
     bl_label = "Select Image Plane"
+    bl_description = "Select this plane and its rig control bone"
     plane: bpy.props.StringProperty()
 
     def execute(self, context):
@@ -135,7 +129,7 @@ class MAGICAM_OT_caddy_set_plane(bpy.types.Operator):
                 try:
                     mpc_scene.select_image_plane(armature, bone)
                 except Exception as exc:
-                    print(f"[magicam] plane select skipped: {exc}")
+                    print(f"[magicam] plane control select skipped: {exc}")
         return {"FINISHED"}
 
 
@@ -152,17 +146,18 @@ class MAGICAM_OT_caddy_jump_frame(bpy.types.Operator):
 class MAGICAM_OT_caddy_view_range(bpy.types.Operator):
     bl_idname = "magicam.caddy_view_range"
     bl_label = "View Range"
-    bl_description = "Set the timeline preview range to the shot's start/end"
+    bl_description = "Set the timeline preview range to this camera's shot range"
 
     def execute(self, context):
         st = context.scene.magicam_caddy
-        data = _all_shots().get(st.active_shot)
-        if not data:
+        entry = _all_cameras().get(st.camera)
+        if not entry:
             return {"CANCELLED"}
+        _, _, _, start, end = entry
         scene = context.scene
         scene.use_preview_range = True
-        scene.frame_preview_start = int(data.get("start_frame", scene.frame_start))
-        scene.frame_preview_end = int(data.get("end_frame", scene.frame_end))
+        scene.frame_preview_start = _to_int(start, scene.frame_start)
+        scene.frame_preview_end = _to_int(end, scene.frame_end)
         return {"FINISHED"}
 
 
@@ -182,10 +177,11 @@ class MAGICAM_OT_caddy_create_static(bpy.types.Operator):
             return {"CANCELLED"}
         new_obj = mpc_ip.static_image_plane(obj)
 
-        arm = _arm_for_shot(st.active_shot)
-        if arm:
+        entry = _all_cameras().get(st.camera)
+        if entry:
+            _, arm, _, _, _ = entry
             data = mpc_scene.load_camera_data_from_armature(arm)
-            cam = data.get("cameras", {}).get(st.active_camera)
+            cam = data.get("cameras", {}).get(st.camera)
             if cam is not None:
                 frames = (
                     cam["camera_planes"].get(st.active_plane, {}).get("image_frames", [])
@@ -203,59 +199,35 @@ class MAGICAM_OT_caddy_create_static(bpy.types.Operator):
 # --- panel -----------------------------------------------------------------
 
 class MAGICAM_PT_caddy(bpy.types.Panel):
-    bl_label = "Camera Caddy (native)"
+    bl_label = "Camera Caddy"
     bl_idname = "MAGICAM_PT_caddy"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "MagiCam"
-    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         layout = self.layout
         st = context.scene.magicam_caddy
-        shots = _all_shots()
-        if not shots:
+        cameras = _all_cameras()
+        if not cameras:
             layout.label(text="No MagiCam rigs in scene.", icon="INFO")
             return
 
-        col = layout.column(align=True)
-        col.label(text="Shots")
-        for shot in shots:
-            op = col.operator(
-                "magicam.caddy_set_shot", text=shot, depress=(shot == st.active_shot)
-            )
-            op.shot = shot
-
-        if st.active_shot not in shots:
+        layout.prop(st, "camera", text="Camera")
+        if st.camera not in cameras:
             return
-        data = shots[st.active_shot]
+        _, _, cam_dict, start, end = cameras[st.camera]
 
         row = layout.row(align=True)
-        start = data.get("start_frame", "-")
-        end = data.get("end_frame", "-")
         op = row.operator("magicam.caddy_jump_frame", text=f"Start {start}")
-        op.frame = int(start) if str(start).lstrip("-").isdigit() else 0
+        op.frame = _to_int(start)
         op = row.operator("magicam.caddy_jump_frame", text=f"End {end}")
-        op.frame = int(end) if str(end).lstrip("-").isdigit() else 0
+        op.frame = _to_int(end)
         row.operator("magicam.caddy_view_range", text="View Range")
-
-        cams = data.get("cameras", {})
-        col = layout.column(align=True)
-        col.label(text="Cameras")
-        for cam in cams:
-            op = col.operator(
-                "magicam.caddy_set_camera",
-                text=cam,
-                depress=(cam == st.active_camera),
-            )
-            op.camera = cam
-
-        if st.active_camera not in cams:
-            return
 
         layout.prop(st, "lens", text="Lens")
 
-        planes = cams[st.active_camera].get("camera_planes", {})
+        planes = cam_dict.get("camera_planes", {})
         col = layout.column(align=True)
         col.label(text="Image Planes")
         for plane in planes:
@@ -282,8 +254,6 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
 
 _classes = (
     MagicamCaddyState,
-    MAGICAM_OT_caddy_set_shot,
-    MAGICAM_OT_caddy_set_camera,
     MAGICAM_OT_caddy_set_plane,
     MAGICAM_OT_caddy_jump_frame,
     MAGICAM_OT_caddy_view_range,

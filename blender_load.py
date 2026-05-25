@@ -64,3 +64,7 @@ import magicam.blender as mb
 importlib.reload(mb)
 mb.register()
 print("MagiCam registered. Press N in the 3D viewport and open the 'MagiCam' tab.")
+
+
+# in blender:
+# exec(open(r"C:\Users\tmiko\PycharmProjects\magicam-blender\blender_load.py").read())

@@ -47,45 +47,6 @@ class MAGICAM_OT_import_tvpaint(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 
-def _launch(which):
-    """Import caddy lazily so the add-on registers even without PySide6."""
-    try:
-        from magicam.blender import caddy
-    except ImportError as exc:
-        return f"PySide6 not available in Blender's Python: {exc}"
-    fn = getattr(caddy, which)
-    result = fn()
-    if result is None and which == "launch_caddy":
-        return "No MagiCam rigs in the scene to manage."
-    return None
-
-
-class MAGICAM_OT_open_caddy(bpy.types.Operator):
-    bl_idname = "magicam.open_caddy"
-    bl_label = "Open Camera Caddy"
-    bl_description = "Open the PySide6 Camera Caddy for the rigs in this scene"
-
-    def execute(self, context):
-        err = _launch("launch_caddy")
-        if err:
-            self.report({"WARNING"}, err)
-            return {"CANCELLED"}
-        return {"FINISHED"}
-
-
-class MAGICAM_OT_open_importer(bpy.types.Operator):
-    bl_idname = "magicam.open_importer"
-    bl_label = "Camera Importer (Caddy)"
-    bl_description = "Open the PySide6 TVPaint camera importer dialog"
-
-    def execute(self, context):
-        err = _launch("launch_camera_importer")
-        if err:
-            self.report({"WARNING"}, err)
-            return {"CANCELLED"}
-        return {"FINISHED"}
-
-
 class MAGICAM_OT_toggle_plane(bpy.types.Operator):
     bl_idname = "magicam.toggle_plane"
     bl_label = "Toggle Image Plane"
@@ -102,9 +63,4 @@ class MAGICAM_OT_toggle_plane(bpy.types.Operator):
         return {"FINISHED"}
 
 
-classes = (
-    MAGICAM_OT_import_tvpaint,
-    MAGICAM_OT_open_caddy,
-    MAGICAM_OT_open_importer,
-    MAGICAM_OT_toggle_plane,
-)
+classes = (MAGICAM_OT_import_tvpaint, MAGICAM_OT_toggle_plane)

@@ -63,51 +63,39 @@ import magicam.blender as mb
 mb.register()   # adds the "MagiCam" tab to the 3D viewport sidebar (N)
 ```
 
-The panel has an **Import TVPaint Camera** button (pick a `clip_export.json`,
-set a shot name) and lists each rig's image planes with visibility toggles.
+The **MagiCam** panel has an **Import TVPaint Camera** button (pick a
+`clip_export.json`; leave the shot name blank to use the clip name).
 
 You can also drive it headlessly:
 
 ```python
 from magicam.blender import build
-build.import_multicam_rig(r"...\clip_export.json", shot_name="SEQ_0010")
+build.import_multicam_rig(r"...\clip_export.json", shot_name="")  # blank = clip name
 ```
 
-### Camera Caddy (PySide6)
+### Camera Caddy (native bpy panel)
 
-The original PySide6 "Camera Caddy" is ported in `magicam/blender/caddy.py` and
-wired to the new architecture. It's the practical way to drive a rig (shots /
-cameras / planes, visibility, lens, frame jumps, create-static, character-snap).
-Open it from the **MagiCam** panel ("Open Camera Caddy") or:
+`magicam/blender/caddy_blender.py` provides the **Camera Caddy** panel in the
+MagiCam sidebar tab — a fully native (no PySide) Blender UI:
 
-```python
-from magicam.blender import caddy
-caddy.launch_caddy()            # manage rigs in the scene
-caddy.launch_camera_importer()  # the import dialog
-```
+- a **Camera** dropdown (one shot == one camera), with **Start / End / View
+  Range** buttons right below it,
+- a **Lens** dropdown,
+- the camera's **image planes**, each with a visibility toggle; clicking a plane
+  selects its rig control bone,
+- per-plane **Opacity** and **Create Static** for the active plane.
 
-This still requires **PySide6 in Blender's Python** (a native bpy rebuild is
-deferred). If PySide6 is missing the rest of the add-on still loads — only the
-Caddy buttons report it. If the Caddy window is unresponsive, that's the usual
-Qt-event-loop-in-Blender issue and we can add a modal event pump.
+Selection state lives in a Scene `PropertyGroup`, so it survives redraws, undo,
+and save/load. No PySide6 anywhere in the package.
 
-### Camera Caddy (native bpy)
+Deferred for now: the thumbnail strip (would use `bpy.utils.previews`),
+move/rotate nudges, and character-snap.
 
-`magicam/blender/caddy_blender.py` is a PySide-free alternative: a **Camera
-Caddy (native)** panel in the MagiCam sidebar tab (collapsed by default). It
-covers the core set — shots/cameras/planes lists, per-plane visibility toggles,
-lens, frame start/end jump + view-range, per-plane opacity, and create-static —
-with selection state stored in a Scene `PropertyGroup`. The PySide `caddy.py` is
-left in place so you can compare the two. Deferred in the native panel for now:
-the thumbnail strip, move/rotate, and character-snap.
+### Known limitations
 
-### Scope and known limitations of this first cut
-
-- **Untested outside Blender.** The `magicam.blender` modules import `bpy`; they
-  pass a syntax check here but must be verified inside Blender.
-- **Import + plane-list panel only.** Character-snapping, per-plane
-  opacity/move/rotate, lens control, "create static", and the thumbnail strip
-  from the old Qt "Camera Caddy" are not ported yet.
+- **Verify in Blender.** The `magicam.blender` modules import `bpy`; they pass a
+  syntax check outside Blender but behavior must be confirmed in Blender (target:
+  Blender 5.1 / EEVEE Next).
 - **10 planes.** The bundled rig provides `image_plane_01..10`; layers beyond the
   10th are skipped with a console note.
 - **Pipeline seam off by default.** Alchemy hooks (task structure, etc.) only run
