@@ -91,6 +91,16 @@ deferred). If PySide6 is missing the rest of the add-on still loads — only the
 Caddy buttons report it. If the Caddy window is unresponsive, that's the usual
 Qt-event-loop-in-Blender issue and we can add a modal event pump.
 
+### Camera Caddy (native bpy)
+
+`magicam/blender/caddy_blender.py` is a PySide-free alternative: a **Camera
+Caddy (native)** panel in the MagiCam sidebar tab (collapsed by default). It
+covers the core set — shots/cameras/planes lists, per-plane visibility toggles,
+lens, frame start/end jump + view-range, per-plane opacity, and create-static —
+with selection state stored in a Scene `PropertyGroup`. The PySide `caddy.py` is
+left in place so you can compare the two. Deferred in the native panel for now:
+the thumbnail strip, move/rotate, and character-snap.
+
 ### Scope and known limitations of this first cut
 
 - **Untested outside Blender.** The `magicam.blender` modules import `bpy`; they
