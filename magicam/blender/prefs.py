@@ -21,13 +21,28 @@ class MagicamPreferences(bpy.types.AddonPreferences):
         default=False,
     )
 
+    hdri_json_path: bpy.props.StringProperty(
+        name="HDRI library (JSON)",
+        description="Path to the converted HDRI library JSON (hdri.json)",
+        subtype="FILE_PATH",
+        default=r"E:\Alchemy\cgl\config\CGL-HDRI\hdri.json",
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "enable_pipeline")
+        layout.prop(self, "hdri_json_path")
         layout.label(
             text="Rig template is bundled with the add-on (resources/).",
             icon="FILE_BLEND",
         )
+
+
+def get_hdri_json_path() -> str:
+    try:
+        return bpy.context.preferences.addons[ADDON_ID].preferences.hdri_json_path
+    except (KeyError, AttributeError):
+        return r"E:\Alchemy\cgl\config\CGL-HDRI\hdri.json"
 
 
 def get_enable_pipeline() -> bool:

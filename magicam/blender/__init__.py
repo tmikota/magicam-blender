@@ -22,7 +22,7 @@ bl_info = {
 
 import bpy
 
-from magicam.blender import caddy_blender, ops, panels, prefs
+from magicam.blender import caddy_blender, lighting, ops, panels, prefs
 
 _classes = (prefs.MagicamPreferences, *ops.classes, *panels.classes)
 
@@ -36,6 +36,7 @@ def register():
             pass
         bpy.utils.register_class(cls)
     caddy_blender.register()
+    lighting.register()
 
 
 def unregister():
@@ -45,6 +46,7 @@ def unregister():
         _scene.disable_multicam_playback()
     except Exception:
         pass
+    lighting.unregister()
     caddy_blender.unregister()
     for cls in reversed(_classes):
         try:

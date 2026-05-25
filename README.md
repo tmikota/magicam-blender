@@ -115,6 +115,24 @@ panel.
 One board = one image plane today; mapping a board's PSD layers onto the rig's
 multiple planes is a future enhancement.
 
+### Lighting — HDRI picker
+
+The **Lighting** panel in the MagiCam tab is a thumbnail grid (Blender's
+`template_icon_view`) of an HDRI library; picking one and hitting **Apply HDRI**
+sets up the World with an Environment Texture and a Mapping rotation from the
+HDRI's `yrot`, so it lights the scene from the intended direction.
+
+- `magicam.hdri` reads a **JSON** library (stdlib + pydantic, no PyYAML at
+  runtime). Convert a source `hdri.yaml` once where PyYAML is available:
+  ```python
+  from magicam.hdri import yaml_to_json
+  yaml_to_json(r"...\CGL-HDRI\hdri.yaml")   # writes hdri.json beside it
+  ```
+  (`validate_hdri.py` does this and checks the resolved image/thumbnail paths.)
+- Thumbnails follow the `Name_thumb.png` convention beside each HDRI; entries
+  with no loadable image (e.g. `.tx`-only) are skipped.
+- Point the add-on preference **HDRI library (JSON)** at the `hdri.json`.
+
 ### Known limitations
 
 - **Verify in Blender.** The `magicam.blender` modules import `bpy`; they pass a
