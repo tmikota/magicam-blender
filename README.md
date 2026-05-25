@@ -66,11 +66,13 @@ mb.register()   # adds the "MagiCam" tab to the 3D viewport sidebar (N)
 The **MagiCam** panel has an **Import TVPaint Camera** button (pick a
 `clip_export.json`; leave the shot name blank to use the clip name).
 
-You can also drive it headlessly:
+You can also drive it headlessly (e.g. from an Alchemy build recipe). The
+package exposes lazy entry points so `import magicam.blender` stays `alc`-free:
 
 ```python
-from magicam.blender import build
-build.import_multicam_rig(r"...\clip_export.json", shot_name="")  # blank = clip name
+import magicam.blender as mb
+mb.import_multicam_rig(r"...\clip_export.json", shot_name="")   # blank = clip name
+mb.import_alchemy_timeline(r"...\scene_010_timeline.json")      # boards + audio (needs alc)
 ```
 
 ### Camera Caddy (native bpy panel)

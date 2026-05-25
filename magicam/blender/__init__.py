@@ -51,3 +51,24 @@ def unregister():
             bpy.utils.unregister_class(cls)
         except Exception:
             pass
+
+
+# --- public entry points for build recipes ---------------------------------
+# Lazy imports: `timeline` pulls in `alc`, so importing it here would stop the
+# add-on registering for users without Alchemy. Calling these does the import.
+
+def import_alchemy_timeline(timeline_json_path):
+    """Build a camera per storyboard + audio from an Alchemy scene_*_timeline.json.
+
+    Requires the `alc` package (for path resolution). Returns (cameras, audio_strips).
+    """
+    from magicam.blender import timeline
+
+    return timeline.import_alchemy_timeline(timeline_json_path)
+
+
+def import_multicam_rig(tvpaint_json, shot_name=None, **kwargs):
+    """Build a TVPaint multiplane camera rig from a clip_export.json."""
+    from magicam.blender import build
+
+    return build.import_multicam_rig(tvpaint_json, shot_name=shot_name, **kwargs)
