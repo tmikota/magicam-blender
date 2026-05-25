@@ -265,38 +265,70 @@ def select_rig_root(rig_name, root_bone_name):
         except RuntimeError as exc:
             print(f"Could not enter Pose mode: {exc}")
             return
-    for bone in rig.data.bones:
-        bone.select = False
-    if root_bone_name in rig.pose.bones:
-        rig.data.bones.active = rig.data.bones[root_bone_name]
-        rig.data.bones[root_bone_name].select = True
+    _deselect_all_pose_bones(rig)
+    pbone = rig.pose.bones.get(root_bone_name)
+    if pbone:
+        _set_bone_selected(pbone, True)
+        try:
+            rig.data.bones.active = pbone.bone
+        except Exception as exc:
+            print(f"Could not set active bone: {exc}")
     else:
         print(f"Bone '{root_bone_name}' not found on '{rig_name}'.")
 
 
+def _set_bone_selected(pose_bone, state):
+    """Set a bone's select state, tolerating API moves across Blender versions.
+
+    Blender 5.x dropped ``Bone.select``; try the PoseBone and the underlying
+    Bone, setting whichever still exposes ``select``.
+    """
+    for target in (pose_bone, pose_bone.bone):
+        if hasattr(target, "select"):
+            try:
+                target.select = state
+                return True
+            except Exception:
+                pass
+    return False
+
+
+def _deselect_all_pose_bones(rig_object):
+    try:
+        bpy.ops.pose.select_all(action="DESELECT")
+        return
+    except Exception:
+        pass
+    for pb in rig_object.pose.bones:
+        _set_bone_selected(pb, False)
+
+
 def select_bone_on_rig(rig_object, bone_name):
-    """Select a single pose bone by name on the given armature."""
+    """Select and activate a single pose bone by name on the given armature."""
     if isinstance(rig_object, str):
         rig_object = bpy.data.objects.get(rig_object)
     if not rig_object or rig_object.type != "ARMATURE":
         print("Provided object is not an armature.")
         return
-    if rig_object.mode != "POSE":
-        try:
-            bpy.context.view_layer.objects.active = rig_object
-            rig_object.select_set(True)
+    try:
+        bpy.context.view_layer.objects.active = rig_object
+        rig_object.select_set(True)
+        if rig_object.mode != "POSE":
             bpy.ops.object.mode_set(mode="POSE")
-        except RuntimeError as exc:
-            print(f"Failed to switch to Pose mode: {exc}")
-            return
+    except RuntimeError as exc:
+        print(f"Failed to switch to Pose mode: {exc}")
+
     pbone = rig_object.pose.bones.get(bone_name)
     if not pbone:
         print(f"Bone '{bone_name}' not found on '{rig_object.name}'.")
         return
-    for b in rig_object.data.bones:
-        b.select = False
-    rig_object.data.bones.active = pbone.bone
-    pbone.bone.select = True
+
+    _deselect_all_pose_bones(rig_object)
+    _set_bone_selected(pbone, True)
+    try:
+        rig_object.data.bones.active = pbone.bone
+    except Exception as exc:
+        print(f"Could not set active bone: {exc}")
 
 
 def select_camera_root(camera_rig_name):
