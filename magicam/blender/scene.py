@@ -7,6 +7,7 @@ and alc edit.py/create.py.
 from __future__ import annotations
 
 import json
+import re
 
 import bpy
 
@@ -366,5 +367,30 @@ def get_image_plane_bone(image_plane_object):
         for vg in image_plane_object.vertex_groups:
             if vg.name in bone_names:
                 return arm, vg.name
+
+    # 5) Fallback: the rig's stored data owns this plane. Use an explicit
+    # control_bone if recorded at import, else rebuild it from the plane's
+    # 'ipNN' material token and the stored prefix (image_plane_NN_ctrl).
+    plane_num = None
+    for slot in image_plane_object.material_slots:
+        mat = slot.material
+        match = re.search(r"ip(\d+)", mat.name) if mat else None
+        if match:
+            plane_num = match.group(1).zfill(2)
+            break
+    for arm in get_multicam_armatures():
+        data = load_camera_data_from_armature(arm)
+        prefix = data.get("prefix", "")
+        for cam in data.get("cameras", {}).values():
+            entry = cam.get("camera_planes", {}).get(image_plane_object.name)
+            if entry is None:
+                continue
+            bone = entry.get("control_bone")
+            if bone and arm.pose.bones.get(bone):
+                return arm, bone
+            if plane_num:
+                bone = f"{prefix}image_plane_{plane_num}_ctrl"
+                if arm.pose.bones.get(bone):
+                    return arm, bone
 
     return None, None

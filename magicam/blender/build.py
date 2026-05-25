@@ -111,6 +111,7 @@ def import_multicam_rig(
         if not result:
             continue
         plane_, plane_dict = result
+        plane_dict["control_bone"] = f"{prefix}image_plane_{image_plane_number}_ctrl"
         camera_planes[plane_.name] = plane_dict
 
         scene.key_visibility(plane_.name, int(shot_start_frame))
@@ -137,5 +138,10 @@ def import_multicam_rig(
     if camera_obj:
         scene.timeline_mark(rig_collection, frame=shot_start_frame, camera_obj=camera_obj)
         scene.enable_multicam_playback()
+
+    # Force a depsgraph re-evaluation so image-driven plane sizes refresh at
+    # load, instead of staying at rig defaults until visibility is toggled.
+    bpy.context.view_layer.update()
+    bpy.context.scene.frame_set(bpy.context.scene.frame_current)
 
     return rig_collection_object
