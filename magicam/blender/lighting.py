@@ -91,8 +91,57 @@ def _build_world_hdri(scene, image_path, yrot_degrees):
     link(bg.outputs["Background"], out.inputs["Surface"])
 
 
+_spot_enum_items = []  # keep a reference so Blender doesn't GC the enum strings
+
+SPOT_TAG = "magicam_spot"
+
+
+def _spot_rigs():
+    return [o for o in bpy.data.objects if o.get(SPOT_TAG)]
+
+
+def _spot_items(self, context):
+    global _spot_enum_items
+    items = [(o.name, o.name, "") for o in _spot_rigs()]
+    _spot_enum_items = items or [("NONE", "(no spot rigs)", "")]
+    return _spot_enum_items
+
+
+def _select_object(obj, tool="builtin.move"):
+    """Make obj the sole selection/active in Object mode and set a transform tool."""
+    try:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    for o in list(bpy.context.selected_objects):
+        o.select_set(False)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    try:
+        bpy.ops.wm.tool_set_by_id(name=tool)
+    except Exception as exc:
+        print(f"[magicam] could not set tool '{tool}': {exc}")
+
+
+def _snap_control_to_selection(context, control):
+    """Move control to the selected geometry/object via the 3D cursor (restored after)."""
+    scn = context.scene
+    saved = scn.cursor.location.copy()
+    try:
+        bpy.ops.view3d.snap_cursor_to_selected()
+    except Exception as exc:
+        print(f"[magicam] snap to selection failed: {exc}")
+        return False
+    control.location = scn.cursor.location.copy()
+    scn.cursor.location = saved
+    return True
+
+
 class MagicamLightingState(bpy.types.PropertyGroup):
     hdri: bpy.props.EnumProperty(name="HDRI", items=_hdri_items)
+    spot: bpy.props.EnumProperty(name="Spot", items=_spot_items)
+    spot_distance: bpy.props.FloatProperty(name="Distance", default=10.0, min=0.1)
 
 
 class MAGICAM_OT_apply_hdri(bpy.types.Operator):
@@ -113,6 +162,73 @@ class MAGICAM_OT_apply_hdri(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class MAGICAM_OT_create_spot(bpy.types.Operator):
+    bl_idname = "magicam.create_spot"
+    bl_label = "Create Spot Light"
+    bl_description = "Create an aim-rig spot light at the 3D cursor (control empty + offset spot)"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        st = context.scene.magicam_lighting
+        distance = st.spot_distance or 10.0
+
+        n = 1
+        while bpy.data.objects.get(f"MagiSpot_{n:02d}_ctrl"):
+            n += 1
+        base = f"MagiSpot_{n:02d}"
+
+        empty = bpy.data.objects.new(f"{base}_ctrl", None)
+        empty.empty_display_type = "SPHERE"
+        empty.empty_display_size = 0.5
+        empty[SPOT_TAG] = True
+        empty.location = context.scene.cursor.location.copy()
+
+        light_data = bpy.data.lights.new(base, "SPOT")
+        light_obj = bpy.data.objects.new(base, light_data)
+        light_obj.parent = empty
+        light_obj.location = (0.0, 0.0, distance)  # up local +Z, default spot aims -Z back down
+        light_obj.hide_select = True
+
+        coll = context.collection
+        coll.objects.link(empty)
+        coll.objects.link(light_obj)
+
+        _select_object(empty, "builtin.rotate")
+        st.spot = empty.name
+        self.report({"INFO"}, f"Created '{base}' ({distance:g} units)")
+        return {"FINISHED"}
+
+
+class MAGICAM_OT_select_spot_control(bpy.types.Operator):
+    bl_idname = "magicam.select_spot_control"
+    bl_label = "Select Spot Control"
+    bl_description = "Select the spot's control and set the transform tool"
+    tool: bpy.props.StringProperty(default="builtin.move")
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(context.scene.magicam_lighting.spot)
+        if not obj:
+            return {"CANCELLED"}
+        _select_object(obj, self.tool)
+        return {"FINISHED"}
+
+
+class MAGICAM_OT_snap_spot_to_selection(bpy.types.Operator):
+    bl_idname = "magicam.snap_spot_to_selection"
+    bl_label = "Snap Spot to Selection"
+    bl_description = "Snap the spot's control to the selected vertex/face/object"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        obj = bpy.data.objects.get(context.scene.magicam_lighting.spot)
+        if not obj:
+            return {"CANCELLED"}
+        if not _snap_control_to_selection(context, obj):
+            self.report({"WARNING"}, "Nothing selected to snap to.")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class MAGICAM_PT_lighting(bpy.types.Panel):
     bl_label = "Lighting"
     bl_idname = "MAGICAM_PT_lighting"
@@ -123,16 +239,40 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        if not _get_library(context):
-            layout.label(text="Set the HDRI library JSON in add-on prefs.", icon="ERROR")
-            return
         st = context.scene.magicam_lighting
-        layout.template_icon_view(st, "hdri", show_labels=True, scale=6.0)
-        layout.label(text=st.hdri)
-        layout.operator("magicam.apply_hdri", icon="WORLD")
+
+        hdri = layout.box()
+        hdri.label(text="HDRI", icon="WORLD")
+        if _get_library(context):
+            hdri.template_icon_view(st, "hdri", show_labels=True, scale=6.0)
+            hdri.label(text=st.hdri)
+            hdri.operator("magicam.apply_hdri", icon="WORLD")
+        else:
+            hdri.label(text="Set the HDRI library JSON in add-on prefs.", icon="ERROR")
+
+        spots = layout.box()
+        spots.label(text="Spot Lights", icon="LIGHT_SPOT")
+        row = spots.row(align=True)
+        row.prop(st, "spot_distance", text="Dist")
+        row.operator("magicam.create_spot", text="Create")
+        if _spot_rigs():
+            spots.prop(st, "spot", text="")
+            srow = spots.row(align=True)
+            op = srow.operator("magicam.select_spot_control", text="Move")
+            op.tool = "builtin.move"
+            op = srow.operator("magicam.select_spot_control", text="Rotate")
+            op.tool = "builtin.rotate"
+            spots.operator("magicam.snap_spot_to_selection", icon="SNAP_ON")
 
 
-_classes = (MagicamLightingState, MAGICAM_OT_apply_hdri, MAGICAM_PT_lighting)
+_classes = (
+    MagicamLightingState,
+    MAGICAM_OT_apply_hdri,
+    MAGICAM_OT_create_spot,
+    MAGICAM_OT_select_spot_control,
+    MAGICAM_OT_snap_spot_to_selection,
+    MAGICAM_PT_lighting,
+)
 
 
 def register():
