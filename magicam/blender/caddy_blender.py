@@ -17,6 +17,9 @@ from magicam.blender import scene as mpc_scene
 LENSES = ["16mm", "24mm", "35mm", "50mm", "85mm", "120mm", "200mm"]
 _LENS_LABELS = set(LENSES)
 
+# Camera rig control bones, outermost-first (suffix after the rig prefix, label).
+CONTROL_BONES = [("main", "Base"), ("dolly", "Dolly"), ("height", "Height"), ("tilt", "Tilt")]
+
 # Keep a reference to the dynamic enum items so Blender doesn't GC the strings.
 _camera_enum_items = []
 
@@ -133,6 +136,22 @@ class MAGICAM_OT_caddy_set_plane(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class MAGICAM_OT_caddy_select_control(bpy.types.Operator):
+    bl_idname = "magicam.caddy_select_control"
+    bl_label = "Select Camera Control"
+    bl_description = "Select this control bone on the active camera's rig (grab with G)"
+    bone: bpy.props.StringProperty()
+
+    def execute(self, context):
+        st = context.scene.magicam_caddy
+        entry = _all_cameras().get(st.camera)
+        if not entry:
+            return {"CANCELLED"}
+        arm = entry[1]
+        mpc_scene.select_bone_on_rig(arm, self.bone)
+        return {"FINISHED"}
+
+
 class MAGICAM_OT_caddy_jump_frame(bpy.types.Operator):
     bl_idname = "magicam.caddy_jump_frame"
     bl_label = "Jump To Frame"
@@ -216,7 +235,7 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
         layout.prop(st, "camera", text="Camera")
         if st.camera not in cameras:
             return
-        _, _, cam_dict, start, end = cameras[st.camera]
+        _, arm, cam_dict, start, end = cameras[st.camera]
 
         row = layout.row(align=True)
         op = row.operator("magicam.caddy_jump_frame", text=f"Start {start}")
@@ -224,6 +243,21 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
         op = row.operator("magicam.caddy_jump_frame", text=f"End {end}")
         op.frame = _to_int(end)
         row.operator("magicam.caddy_view_range", text="View Range")
+
+        # Camera controls: select a rig control bone (ready to grab).
+        prefix = st.camera.rsplit("MagiCam", 1)[0]
+        controls = [
+            (suffix, label)
+            for suffix, label in CONTROL_BONES
+            if arm and arm.pose.bones.get(f"{prefix}{suffix}")
+        ]
+        if controls:
+            col = layout.column(align=True)
+            col.label(text="Camera Controls")
+            crow = col.row(align=True)
+            for suffix, label in controls:
+                op = crow.operator("magicam.caddy_select_control", text=label)
+                op.bone = f"{prefix}{suffix}"
 
         layout.prop(st, "lens", text="Lens")
 
@@ -255,6 +289,7 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
 _classes = (
     MagicamCaddyState,
     MAGICAM_OT_caddy_set_plane,
+    MAGICAM_OT_caddy_select_control,
     MAGICAM_OT_caddy_jump_frame,
     MAGICAM_OT_caddy_view_range,
     MAGICAM_OT_caddy_create_static,
