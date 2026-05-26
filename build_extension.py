@@ -98,8 +98,10 @@ def write_manifest() -> None:
 
 
 def build(blender: str) -> None:
+    out_dir = REPO / "dist"
+    out_dir.mkdir(parents=True, exist_ok=True)  # Blender won't create it itself
     cmd = [blender, "--command", "extension", "build",
-           "--source-dir", str(PKG), "--output-dir", str(REPO / "dist")]
+           "--source-dir", str(PKG), "--output-dir", str(out_dir)]
     print("+", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
