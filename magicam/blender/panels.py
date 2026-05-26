@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import bpy
 
-from magicam.blender import prefs
+from . import prefs
 
 
 class MAGICAM_PT_main(bpy.types.Panel):

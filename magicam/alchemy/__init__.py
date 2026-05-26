@@ -1,6 +1,6 @@
 """Pydantic models for reading Alchemy edit timelines (scene_*_timeline.json)."""
 
-from magicam.alchemy.models import (
+from .models import (
     RationalTime,
     Timeline,
     TimelineClip,

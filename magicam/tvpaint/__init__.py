@@ -1,6 +1,6 @@
 """Pydantic models for reading TVPaint clip_export.json files (v11 and v12 schemas)."""
 
-from magicam.tvpaint.models import (
+from .models import (
     BackgroundColor,
     CameraKeyframe,
     ClipCamera,

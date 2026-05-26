@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Union
 
-from magicam.tvpaint.models import Layer, TVPaintExport, load_clip
+from .models import Layer, TVPaintExport, load_clip
 
 Source = Union[str, Path, dict, TVPaintExport]
 

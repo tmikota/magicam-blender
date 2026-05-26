@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import bpy
 
-from magicam.blender import image_plane as mpc_ip
-from magicam.blender import scene as mpc_scene
+from . import image_plane as mpc_ip
+from . import scene as mpc_scene
 
 LENSES = ["16mm", "24mm", "35mm", "50mm", "85mm", "120mm", "200mm"]
 _LENS_LABELS = set(LENSES)

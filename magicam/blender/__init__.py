@@ -22,7 +22,7 @@ bl_info = {
 
 import bpy
 
-from magicam.blender import caddy_blender, lighting, ops, panels, prefs
+from . import caddy_blender, lighting, ops, panels, prefs
 
 _classes = (prefs.MagicamPreferences, *ops.classes, *panels.classes)
 
@@ -41,7 +41,7 @@ def register():
 
 def unregister():
     try:
-        from magicam.blender import scene as _scene
+        from . import scene as _scene
 
         _scene.disable_multicam_playback()
     except Exception:
@@ -64,13 +64,13 @@ def import_alchemy_timeline(timeline_json_path):
 
     Requires the `alc` package (for path resolution). Returns (cameras, audio_strips).
     """
-    from magicam.blender import timeline
+    from . import timeline
 
     return timeline.import_alchemy_timeline(timeline_json_path)
 
 
 def import_multicam_rig(tvpaint_json, shot_name=None, **kwargs):
     """Build a TVPaint multiplane camera rig from a clip_export.json."""
-    from magicam.blender import build
+    from . import build
 
     return build.import_multicam_rig(tvpaint_json, shot_name=shot_name, **kwargs)

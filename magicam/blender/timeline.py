@@ -18,8 +18,8 @@ import os
 import bpy
 from alc.path import media_to_abs
 
-from magicam.alchemy import load_timeline
-from magicam.blender import image_plane, rig, scene
+from ..alchemy import load_timeline
+from . import image_plane, rig, scene
 
 
 def _scene_children_names():

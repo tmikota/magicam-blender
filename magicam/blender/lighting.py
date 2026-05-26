@@ -15,7 +15,7 @@ import os
 import bpy
 import bpy.utils.previews
 
-from magicam.blender import prefs
+from . import prefs
 
 _previews = None
 _hdri_enum_items = []  # keep a reference so Blender doesn't GC the enum strings
@@ -29,7 +29,7 @@ def _get_library(context=None):
     if not path or not os.path.exists(path):
         return None
     if _library is None or _library_path != path:
-        from magicam.hdri import load_hdri_library
+        from ..hdri import load_hdri_library
 
         _library = load_hdri_library(path)
         _library_path = path

@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy_extras.io_utils import ImportHelper
 
-from magicam.blender import build, prefs, scene
+from . import build, prefs, scene
 
 
 class MAGICAM_OT_import_tvpaint(bpy.types.Operator, ImportHelper):
@@ -66,7 +66,7 @@ class MAGICAM_OT_import_timeline(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         prefs.ensure_alchemy_on_path()
         try:
-            from magicam.blender import timeline
+            from . import timeline
         except ImportError as exc:
             self.report({"ERROR"}, f"Alchemy (alc) not importable: {exc}")
             return {"CANCELLED"}

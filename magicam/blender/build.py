@@ -12,8 +12,8 @@ import re
 
 import bpy
 
-from magicam.blender import image_plane, rig, scene
-from magicam.tvpaint import query as tvp_query
+from . import image_plane, rig, scene
+from ..tvpaint import query as tvp_query
 
 
 def shot_name_from_clip(clip_name: str) -> str:

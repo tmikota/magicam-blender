@@ -13,8 +13,9 @@ import sys
 
 import bpy
 
-# Module path Blender registers this add-on under (see magicam/blender/__init__.py).
-ADDON_ID = __package__  # "magicam.blender"
+# The add-on/extension root module Blender keys preferences under: plain
+# "magicam" as a library, or "bl_ext.<repo>.magicam" as an installed extension.
+ADDON_ID = __package__.rpartition(".")[0]
 
 _alc_cache: dict = {}
 
