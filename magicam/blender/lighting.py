@@ -100,6 +100,16 @@ def _spot_rigs():
     return [o for o in bpy.data.objects if o.get(SPOT_TAG)]
 
 
+def _spot_light(control):
+    """The SPOT light object parented under a control empty, if any."""
+    if not control:
+        return None
+    for child in control.children:
+        if child.type == "LIGHT" and child.data and child.data.type == "SPOT":
+            return child
+    return None
+
+
 def _spot_items(self, context):
     global _spot_enum_items
     items = [(o.name, o.name, "") for o in _spot_rigs()]
@@ -184,6 +194,9 @@ class MAGICAM_OT_create_spot(bpy.types.Operator):
         empty.location = context.scene.cursor.location.copy()
 
         light_data = bpy.data.lights.new(base, "SPOT")
+        # Inverse-square falloff: at `distance` units the light needs ~distance^2
+        # more power to read. 50*d^2 gives a visible default (~5000W at 10 units).
+        light_data.energy = 50.0 * distance * distance
         light_obj = bpy.data.objects.new(base, light_data)
         light_obj.parent = empty
         light_obj.location = (0.0, 0.0, distance)  # up local +Z, default spot aims -Z back down
@@ -263,6 +276,12 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
             op = srow.operator("magicam.select_spot_control", text="Rotate")
             op.tool = "builtin.rotate"
             spots.operator("magicam.snap_spot_to_selection", icon="SNAP_ON")
+
+            light = _spot_light(bpy.data.objects.get(st.spot))
+            if light:
+                spots.prop(light.data, "energy", text="Power")
+                spots.prop(light.data, "spot_size", text="Cone")
+                spots.prop(light.data, "color", text="")
 
 
 _classes = (
