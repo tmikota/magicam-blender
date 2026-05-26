@@ -297,7 +297,11 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
             light = _spot_light(bpy.data.objects.get(st.spot))
             if light:
                 ld = light.data
-                spots.prop(ld, "energy", text="Power")
+                # Exposure (stops) reads more naturally than raw Power wattage.
+                if hasattr(ld, "exposure"):
+                    spots.prop(ld, "exposure", text="Exposure")
+                else:
+                    spots.prop(ld, "energy", text="Power")
                 crow = spots.row(align=True)
                 crow.prop(ld, "spot_size", text="Cone")
                 crow.prop(ld, "spot_blend", text="Blend")
