@@ -159,8 +159,26 @@ def _world_nodes(scene):
     return bg, mapping
 
 
+def _get_hdri_exposure(self):
+    bg, _ = _world_nodes(bpy.context.scene)
+    if bg:
+        strength = bg.inputs["Strength"].default_value
+        return math.log2(strength) if strength > 0 else 0.0
+    return 0.0
+
+
+def _set_hdri_exposure(self, value):
+    bg, _ = _world_nodes(bpy.context.scene)
+    if bg:
+        bg.inputs["Strength"].default_value = 2.0 ** value
+
+
 class MagicamLightingState(bpy.types.PropertyGroup):
     hdri: bpy.props.EnumProperty(name="HDRI", items=_hdri_items)
+    # Exposure in stops, backed by the World Background strength (2**stops).
+    hdri_exposure: bpy.props.FloatProperty(
+        name="Exposure", get=_get_hdri_exposure, set=_set_hdri_exposure
+    )
     spot: bpy.props.EnumProperty(name="Spot", items=_spot_items)
     spot_distance: bpy.props.FloatProperty(name="Distance", default=10.0, min=0.1)
 
@@ -276,7 +294,7 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
 
         bg, mapping = _world_nodes(context.scene)
         if bg:
-            hdri.prop(bg.inputs["Strength"], "default_value", text="Brightness")
+            hdri.prop(st, "hdri_exposure", text="Exposure")
         if mapping:
             hdri.prop(mapping.inputs["Rotation"], "default_value", index=2, text="Rotation")
 
