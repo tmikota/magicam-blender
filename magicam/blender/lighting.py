@@ -148,6 +148,17 @@ def _snap_control_to_selection(context, control):
     return True
 
 
+def _world_nodes(scene):
+    """The Background and Mapping nodes of the scene World (None if not our setup)."""
+    world = scene.world
+    if not world or not world.use_nodes:
+        return None, None
+    nt = world.node_tree
+    bg = next((n for n in nt.nodes if n.type == "BACKGROUND"), None)
+    mapping = next((n for n in nt.nodes if n.type == "MAPPING"), None)
+    return bg, mapping
+
+
 class MagicamLightingState(bpy.types.PropertyGroup):
     hdri: bpy.props.EnumProperty(name="HDRI", items=_hdri_items)
     spot: bpy.props.EnumProperty(name="Spot", items=_spot_items)
@@ -263,6 +274,12 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
         else:
             hdri.label(text="Set the HDRI library JSON in add-on prefs.", icon="ERROR")
 
+        bg, mapping = _world_nodes(context.scene)
+        if bg:
+            hdri.prop(bg.inputs["Strength"], "default_value", text="Brightness")
+        if mapping:
+            hdri.prop(mapping.inputs["Rotation"], "default_value", index=2, text="Rotation")
+
         spots = layout.box()
         spots.label(text="Spot Lights", icon="LIGHT_SPOT")
         row = spots.row(align=True)
@@ -279,9 +296,17 @@ class MAGICAM_PT_lighting(bpy.types.Panel):
 
             light = _spot_light(bpy.data.objects.get(st.spot))
             if light:
-                spots.prop(light.data, "energy", text="Power")
-                spots.prop(light.data, "spot_size", text="Cone")
-                spots.prop(light.data, "color", text="")
+                ld = light.data
+                spots.prop(ld, "energy", text="Power")
+                crow = spots.row(align=True)
+                crow.prop(ld, "spot_size", text="Cone")
+                crow.prop(ld, "spot_blend", text="Blend")
+                spots.prop(ld, "color", text="")
+                if hasattr(ld, "use_temperature"):
+                    trow = spots.row(align=True)
+                    trow.prop(ld, "use_temperature", text="Temp")
+                    if ld.use_temperature:
+                        trow.prop(ld, "temperature", text="")
 
 
 _classes = (
