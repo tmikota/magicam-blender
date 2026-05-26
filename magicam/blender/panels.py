@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import bpy
 
+from magicam.blender import prefs
+
 
 class MAGICAM_PT_main(bpy.types.Panel):
     bl_label = "MagiCam"
@@ -18,7 +20,13 @@ class MAGICAM_PT_main(bpy.types.Panel):
     def draw(self, context):
         col = self.layout.column(align=True)
         col.operator("magicam.import_tvpaint", icon="OUTLINER_OB_CAMERA")
-        col.operator("magicam.import_timeline", icon="SEQUENCE")
+        if prefs.alc_available():
+            col.operator("magicam.import_timeline", icon="SEQUENCE")
+        else:
+            row = col.row()
+            row.enabled = False
+            row.operator("magicam.import_timeline", icon="SEQUENCE")
+            col.label(text="Alchemy not found — set path in prefs", icon="INFO")
 
 
 classes = (MAGICAM_PT_main,)

@@ -59,7 +59,12 @@ class MAGICAM_OT_import_timeline(bpy.types.Operator, ImportHelper):
     filename_ext = ".json"
     filter_glob: bpy.props.StringProperty(default="*.json", options={"HIDDEN"})
 
+    @classmethod
+    def poll(cls, context):
+        return prefs.alc_available()
+
     def execute(self, context):
+        prefs.ensure_alchemy_on_path()
         try:
             from magicam.blender import timeline
         except ImportError as exc:

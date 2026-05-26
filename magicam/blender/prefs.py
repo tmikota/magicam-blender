@@ -1,53 +1,101 @@
-"""Add-on preferences: the optional Alchemy pipeline seam toggle."""
+"""Add-on preferences / config: paths to optional Alchemy + HDRI library.
+
+Features degrade gracefully: with no Alchemy path the timeline import is
+disabled, with no HDRI library the picker prompts for a path. Spot lights and
+TVPaint import work with no config at all.
+"""
 
 from __future__ import annotations
+
+import importlib.util
+import os
+import sys
 
 import bpy
 
 # Module path Blender registers this add-on under (see magicam/blender/__init__.py).
 ADDON_ID = __package__  # "magicam.blender"
 
+_alc_cache: dict = {}
+
 
 class MagicamPreferences(bpy.types.AddonPreferences):
     bl_idname = ADDON_ID
+
+    alchemy_path: bpy.props.StringProperty(
+        name="Alchemy path",
+        description=(
+            "Folder containing the 'alc' package, added to sys.path so Alchemy "
+            "features (timeline import) work. Leave blank if you don't use Alchemy."
+        ),
+        subtype="DIR_PATH",
+        default="",
+    )
+
+    hdri_json_path: bpy.props.StringProperty(
+        name="HDRI library (JSON)",
+        description="Path to an HDRI library JSON (hdri.json). Leave blank to disable the HDRI picker.",
+        subtype="FILE_PATH",
+        default="",
+    )
 
     enable_pipeline: bpy.props.BoolProperty(
         name="Enable Alchemy pipeline steps",
         description=(
             "Run optional Alchemy pipeline hooks during import (task structure, "
-            "etc.). Requires the alc package to be importable; off by default for "
-            "standalone use."
+            "etc.). Requires Alchemy; off by default for standalone use."
         ),
         default=False,
     )
 
-    hdri_json_path: bpy.props.StringProperty(
-        name="HDRI library (JSON)",
-        description="Path to the converted HDRI library JSON (hdri.json)",
-        subtype="FILE_PATH",
-        default=r"E:\Alchemy\cgl\config\CGL-HDRI\hdri.json",
-    )
-
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "enable_pipeline")
-        layout.prop(self, "hdri_json_path")
+        layout.prop(self, "alchemy_path")
         layout.label(
-            text="Rig template is bundled with the add-on (resources/).",
+            text="Alchemy: " + ("found" if alc_available() else "not found"),
+            icon="CHECKMARK" if alc_available() else "X",
+        )
+        layout.prop(self, "hdri_json_path")
+        layout.prop(self, "enable_pipeline")
+        layout.label(
+            text="Camera rig template is bundled with the add-on.",
             icon="FILE_BLEND",
         )
 
 
-def get_hdri_json_path() -> str:
+def _prefs():
     try:
-        return bpy.context.preferences.addons[ADDON_ID].preferences.hdri_json_path
+        return bpy.context.preferences.addons[ADDON_ID].preferences
     except (KeyError, AttributeError):
-        return r"E:\Alchemy\cgl\config\CGL-HDRI\hdri.json"
+        return None
+
+
+def get_hdri_json_path() -> str:
+    p = _prefs()
+    return p.hdri_json_path if p else ""
 
 
 def get_enable_pipeline() -> bool:
-    """Read the pipeline toggle, defaulting to False if prefs aren't registered."""
-    try:
-        return bool(bpy.context.preferences.addons[ADDON_ID].preferences.enable_pipeline)
-    except (KeyError, AttributeError):
-        return False
+    p = _prefs()
+    return bool(p.enable_pipeline) if p else False
+
+
+def get_alchemy_path() -> str:
+    p = _prefs()
+    return p.alchemy_path if p else ""
+
+
+def ensure_alchemy_on_path() -> None:
+    """Add the configured Alchemy folder to sys.path so 'alc' is importable."""
+    path = get_alchemy_path()
+    if path and os.path.isdir(path) and path not in sys.path:
+        sys.path.insert(0, path)
+
+
+def alc_available() -> bool:
+    """Whether the 'alc' package is importable (after honoring the configured path)."""
+    path = get_alchemy_path()
+    if path not in _alc_cache:
+        ensure_alchemy_on_path()
+        _alc_cache[path] = importlib.util.find_spec("alc") is not None
+    return _alc_cache[path]
