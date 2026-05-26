@@ -11,6 +11,9 @@ import re
 
 import bpy
 
+# Image planes import slightly knocked back by default (reference-friendly).
+DEFAULT_PLANE_OPACITY = 0.85
+
 
 def _set_transparent_material(mat):
     """Configure alpha-blended transparency across Blender 4.0-4.1 and 4.2+ (EEVEE Next).
@@ -72,6 +75,7 @@ def apply_static_image(plane, image_path, full_prefix, new_name=None):
 
     mat = _build_transparent_image_material(image, f"{full_prefix}{base}_mat")
     plane.data.materials.append(mat)
+    set_plane_opacity(plane, DEFAULT_PLANE_OPACITY)
     plane.hide_select = True
     return plane
 
@@ -299,6 +303,7 @@ def import_layer_to_image_plane(plane, image_path, full_prefix, sequence=True, c
             {"frame": 0, "timeline_frame": 0, "path": image_path}
         ]
 
+    set_plane_opacity(plane, DEFAULT_PLANE_OPACITY)
     plane.hide_select = True
     return plane, plane_dict
 

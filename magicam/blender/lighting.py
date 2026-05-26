@@ -195,8 +195,8 @@ class MAGICAM_OT_create_spot(bpy.types.Operator):
 
         light_data = bpy.data.lights.new(base, "SPOT")
         # Inverse-square falloff: at `distance` units the light needs ~distance^2
-        # more power to read. 50*d^2 gives a visible default (~5000W at 10 units).
-        light_data.energy = 50.0 * distance * distance
+        # more power to read. 150*d^2 reads instantly (~15000W at 10 units).
+        light_data.energy = 150.0 * distance * distance
         light_obj = bpy.data.objects.new(base, light_data)
         light_obj.parent = empty
         light_obj.location = (0.0, 0.0, distance)  # up local +Z, default spot aims -Z back down

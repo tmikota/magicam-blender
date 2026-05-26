@@ -101,7 +101,7 @@ class MagicamCaddyState(bpy.types.PropertyGroup):
         update=_on_lens_update,
     )
     opacity: bpy.props.FloatProperty(
-        name="Opacity", min=0.0, max=1.0, default=1.0, update=_on_opacity_update
+        name="Opacity", min=0.0, max=1.0, default=0.85, update=_on_opacity_update
     )
 
 
