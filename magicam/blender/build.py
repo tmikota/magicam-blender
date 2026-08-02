@@ -121,6 +121,10 @@ def import_multicam_rig(
 
     scene.store_camera_data_on_armature(armature_obj, camera_data)
 
+    # Planes are sized by the appended rig, which can land after their materials
+    # were built — re-fit now that everything has settled. Idempotent.
+    image_plane.refit_image_planes(prefix)
+
     scene.hide_image_planes_without_material(prefix)
     rig.hide_after_append(rig_collection_object, prefix)
     scene.toggle_image_plane_controls(prefix)

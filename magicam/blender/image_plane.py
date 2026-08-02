@@ -61,13 +61,39 @@ def fit_uv_scale(image_aspect, plane_aspect):
 def _plane_aspect(plane):
     """A plane object's own width:height, whatever its orientation.
 
-    Read from world-space ``dimensions`` (so object scale counts) by taking the two
-    non-degenerate axes — the planes are rotated to face the camera, so which axes
-    those are depends on the rig.
+    Read from ``dimensions`` (local bbox x object scale, so scale counts and
+    rotation doesn't) by taking the two non-degenerate axes.
+
+    Only a FALLBACK for the fit — see :func:`frame_aspect` for why the plane is the
+    wrong thing to measure.
     """
     dims = sorted((abs(d) for d in plane.dimensions), reverse=True)
     width, height = dims[0], dims[1]
     return width / height if height else 0.0
+
+
+def frame_aspect(plane=None):
+    """The aspect a board should be fitted INTO: the camera frame.
+
+    Deliberately the render aspect rather than the plane's own dimensions. The
+    planes are a 2x2 SQUARE as they come off the appended rig and are only scaled
+    to the frame when that shot is actually set up — so a plane measured at import
+    time reports 1.0, and one measured after the artist has worked the shot reports
+    ~1.77. Baking either into the material leaves it wrong for the other; measured
+    live, half a sequence's boards fit to a square.
+
+    The plane exists to stand in for the camera frame, so the frame is the honest
+    reference and it never changes mid-session. Falls back to the plane's own
+    dimensions only if there is no scene to ask.
+    """
+    scene = getattr(bpy.context, "scene", None)
+    if scene is not None:
+        r = scene.render
+        w = r.resolution_x * (r.pixel_aspect_x or 1.0)
+        h = r.resolution_y * (r.pixel_aspect_y or 1.0)
+        if w and h:
+            return w / h
+    return _plane_aspect(plane) if plane is not None else 0.0
 
 
 def fit_image_to_plane(mat, plane, image):
@@ -88,7 +114,7 @@ def fit_image_to_plane(mat, plane, image):
     if not img_w or not img_h:
         return None
 
-    plane_aspect = _plane_aspect(plane)
+    plane_aspect = frame_aspect(plane)
     if not plane_aspect:
         return None
     image_aspect = img_w / img_h
@@ -102,14 +128,25 @@ def fit_image_to_plane(mat, plane, image):
     tex_node.extension = "CLIP"
 
     scale_x, scale_y = fit_uv_scale(image_aspect, plane_aspect)
-    if abs(scale_x - 1.0) < 1e-4 and abs(scale_y - 1.0) < 1e-4:
-        # Already the plane's aspect — leave the UVs alone (the common 16:9 case).
-        return None
 
-    mapping = nt.nodes.new("ShaderNodeMapping")
-    mapping.name = _FIT_NODE
-    mapping.label = "MagiCam Aspect Fit"
-    tex_coord = nt.nodes.new("ShaderNodeTexCoord")
+    # Idempotent: reuse the node from a previous fit rather than stacking a second
+    # one, so this can be re-run after the plane's final size is known.
+    mapping = nt.nodes.get(_FIT_NODE)
+    if abs(scale_x - 1.0) < 1e-4 and abs(scale_y - 1.0) < 1e-4:
+        if mapping:
+            # Aspect matches now (or the plane was resized): neutralise rather
+            # than leave a stale scale behind.
+            mapping.inputs["Scale"].default_value = (1.0, 1.0, 1.0)
+            mapping.inputs["Location"].default_value = (0.0, 0.0, 0.0)
+        return mapping
+
+    if mapping is None:
+        mapping = nt.nodes.new("ShaderNodeMapping")
+        mapping.name = _FIT_NODE
+        mapping.label = "MagiCam Aspect Fit"
+        tex_coord = nt.nodes.new("ShaderNodeTexCoord")
+        nt.links.new(tex_coord.outputs["UV"], mapping.inputs["Vector"])
+        nt.links.new(mapping.outputs["Vector"], tex_node.inputs["Vector"])
 
     # The Mapping node scales about the UV ORIGIN, so offset to keep the image
     # centred: out = uv*s + 0.5*(1-s) is uv scaled about (0.5, 0.5).
@@ -119,10 +156,36 @@ def fit_image_to_plane(mat, plane, image):
         0.5 * (1.0 - scale_y),
         0.0,
     )
-
-    nt.links.new(tex_coord.outputs["UV"], mapping.inputs["Vector"])
-    nt.links.new(mapping.outputs["Vector"], tex_node.inputs["Vector"])
     return mapping
+
+
+def refit_image_planes(prefix=""):
+    """Re-fit every image plane's UVs to its CURRENT size.
+
+    A safety net for ordering: the fit runs when the material is built, but a plane
+    can be sized afterwards (the rig's planes arrive pre-scaled from the appended
+    .blend). Re-running once everything has settled costs nothing and is idempotent.
+
+    Returns the number of planes re-fitted.
+    """
+    fitted = 0
+    for obj in bpy.data.objects:
+        if obj.type != "MESH" or "plane" not in obj.name.lower():
+            continue
+        if prefix and not obj.name.startswith(prefix):
+            continue
+        for slot in obj.material_slots:
+            mat = slot.material
+            if not mat or not mat.use_nodes:
+                continue
+            tex = next(
+                (n for n in mat.node_tree.nodes if n.type == "TEX_IMAGE"), None
+            )
+            if not tex or not tex.image:
+                continue
+            if fit_image_to_plane(mat, obj, tex.image) is not None:
+                fitted += 1
+    return fitted
 
 
 def _build_transparent_image_material(image, material_name):
