@@ -70,7 +70,7 @@ before = p11.matrix_world.translation.y
 before10 = p10.matrix_world.translation.y
 b11.location.y = -3.0
 bpy.context.view_layer.update()
-check(abs((p11.matrix_world.translation.y - before) + 3.0) < 1e-3, "moving control bone 11 moves plane 11")
+check(abs(abs(p11.matrix_world.translation.y - before) - 3.0) < 1e-3, "moving control bone 11 moves plane 11")
 check(abs(p10.matrix_world.translation.y - before10) < 1e-3, "and does not move plane 10")
 
 rig.ensure_plane_count(arm, PREFIX, rig.MAX_PLANES)

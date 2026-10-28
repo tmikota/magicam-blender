@@ -82,10 +82,9 @@ def _clone_control_bone(armature_obj, src_name, new_name, y_offset):
         eb = armature_obj.data.edit_bones
         src = eb[src_name]
         new = eb.new(new_name)
-        # the template's 01-09 orientation: head toward the camera, tail at the plane
-        head_y, tail_y = sorted((src.head.y, src.tail.y))
-        new.head = (src.head.x, head_y + y_offset, src.head.z)
-        new.tail = (src.tail.x, tail_y + y_offset, src.tail.z)
+        # an exact clone, moved back (the rig spec's plane_slots rule)
+        new.head = (src.head.x, src.head.y + y_offset, src.head.z)
+        new.tail = (src.tail.x, src.tail.y + y_offset, src.tail.z)
         new.roll = src.roll
         new.parent = src.parent
         new.use_connect = False
@@ -98,6 +97,10 @@ def _clone_control_bone(armature_obj, src_name, new_name, y_offset):
     pb.rotation_mode = src_pb.rotation_mode
     pb.custom_shape = src_pb.custom_shape
     pb.custom_shape_scale_xyz = src_pb.custom_shape_scale_xyz
+    pb.custom_shape_translation = src_pb.custom_shape_translation
+    pb.custom_shape_rotation_euler = src_pb.custom_shape_rotation_euler
+    pb.custom_shape_transform = src_pb.custom_shape_transform
+    pb.use_custom_shape_bone_size = src_pb.use_custom_shape_bone_size
     for coll in src_pb.bone.collections:
         coll.assign(pb.bone)
     for con in src_pb.constraints:
