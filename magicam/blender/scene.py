@@ -155,8 +155,8 @@ def toggle_image_plane_controls(prefix, control_prefix="image_plane_"):
     if not rig:
         return
 
-    for i in range(1, 11):
-        plane_name = f"{control_prefix}{i:02d}"
+    pat = re.compile(rf"^{re.escape(control_prefix)}\d+$")
+    for plane_name in sorted(o.name for o in bpy.data.objects if pat.match(o.name)):
         ctrl_name = f"{plane_name}_ctrl"
         plane_obj = bpy.data.objects.get(plane_name)
         pose_bone = rig.pose.bones.get(ctrl_name)
