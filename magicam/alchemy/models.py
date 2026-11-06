@@ -109,6 +109,19 @@ class Timeline(_Base):
 
 
 def load_timeline(path: Union[str, Path]) -> Timeline:
-    """Load and validate an Alchemy ``scene_*_timeline.json``."""
+    """Load and validate an Alchemy ``scene_*_timeline.json``.
+
+    Alchemy saves the timeline nested under the scene manifest (a top-level
+    ``"timeline"`` key alongside scene fields like ``scene_id``/``heading``), so unwrap
+    it — carrying ``scene_id`` down from the parent — before validating. Falls back to
+    treating ``data`` as the timeline itself if there's no wrapper. Mirrors Alchemy's
+    own ``SceneTimeline.load_manifest``. Unknown fields (e.g. ``shot_track``,
+    ``shots_locked``, clip ``shot_type``) are ignored via the model's ``extra="ignore"``.
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "timeline" in data and isinstance(data["timeline"], dict):
+        scene_id = data.get("scene_id")
+        data = data["timeline"]
+        if scene_id and not data.get("scene_id"):
+            data["scene_id"] = scene_id
     return Timeline.model_validate(data)
