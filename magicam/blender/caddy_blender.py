@@ -29,6 +29,11 @@ CONTROL_BONES = [
 # Keep a reference to the dynamic enum items so Blender doesn't GC the strings.
 _camera_enum_items = []
 
+# Session clipboard for Copy/Paste Transforms. Holds one camera's full rig pose
+# (bones keyed by suffix so they map across rigs with different prefixes) plus
+# its lens. Module-global: persists across operator calls within a session.
+_xform_clipboard = None
+
 
 # --- shared data access ----------------------------------------------------
 
@@ -49,6 +54,11 @@ def _all_cameras():
 
 def _to_int(value, fallback=0):
     return int(value) if str(value).lstrip("-").isdigit() else fallback
+
+
+def _bone_suffix(bone_name, prefix):
+    """Bone name with the rig namespace prefix stripped, so it maps across rigs."""
+    return bone_name[len(prefix):] if bone_name.startswith(prefix) else bone_name
 
 
 # --- dynamic enum / update callbacks ---------------------------------------
@@ -205,6 +215,130 @@ class MAGICAM_OT_caddy_key_camera(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _read_bone_xform(pbone):
+    """Snapshot a pose bone's transform (mode-aware rotation)."""
+    entry = {
+        "location": list(pbone.location),
+        "scale": list(pbone.scale),
+        "rotation_mode": pbone.rotation_mode,
+    }
+    if pbone.rotation_mode == "QUATERNION":
+        entry["rotation_quaternion"] = list(pbone.rotation_quaternion)
+    elif pbone.rotation_mode == "AXIS_ANGLE":
+        entry["rotation_axis_angle"] = list(pbone.rotation_axis_angle)
+    else:
+        entry["rotation_euler"] = list(pbone.rotation_euler)
+    return entry
+
+
+def _apply_bone_xform(pbone, entry):
+    """Write a snapshot back onto a pose bone, matching its rotation mode."""
+    pbone.location = entry["location"]
+    pbone.scale = entry["scale"]
+    mode = entry.get("rotation_mode", pbone.rotation_mode)
+    pbone.rotation_mode = mode
+    if mode == "QUATERNION":
+        pbone.rotation_quaternion = entry.get(
+            "rotation_quaternion", pbone.rotation_quaternion
+        )
+    elif mode == "AXIS_ANGLE":
+        pbone.rotation_axis_angle = entry.get(
+            "rotation_axis_angle", pbone.rotation_axis_angle
+        )
+    else:
+        pbone.rotation_euler = entry.get("rotation_euler", pbone.rotation_euler)
+
+
+class MAGICAM_OT_caddy_copy_transforms(bpy.types.Operator):
+    bl_idname = "magicam.caddy_copy_transforms"
+    bl_label = "Copy Transforms"
+    bl_description = (
+        "Copy this camera's full rig pose (all control bones) and lens "
+        "so it can be pasted onto another shot's camera"
+    )
+
+    def execute(self, context):
+        global _xform_clipboard
+        st = context.scene.magicam_caddy
+        entry = _all_cameras().get(st.camera)
+        if not entry:
+            return {"CANCELLED"}
+        arm = entry[1]
+        prefix = st.camera.rsplit("MagiCam", 1)[0]
+
+        bones = {}
+        for pbone in arm.pose.bones:
+            suffix = _bone_suffix(pbone.name, prefix)
+            # Image-plane control bones place shot-specific reference plates;
+            # copying them across shots would clobber the target's plates.
+            if suffix.startswith("image_plane"):
+                continue
+            bones[suffix] = _read_bone_xform(pbone)
+
+        lens = None
+        cam = mpc_scene.camera_object(st.camera)
+        if cam and cam.type == "CAMERA":
+            lens = cam.data.lens
+
+        _xform_clipboard = {"source": st.camera, "lens": lens, "bones": bones}
+        self.report(
+            {"INFO"}, f"Copied {len(bones)} bone(s) + lens from {st.camera}"
+        )
+        return {"FINISHED"}
+
+
+class MAGICAM_OT_caddy_paste_transforms(bpy.types.Operator):
+    bl_idname = "magicam.caddy_paste_transforms"
+    bl_label = "Paste Transforms"
+    bl_description = (
+        "Paste the copied camera's rig pose and lens onto this camera "
+        "(bones matched by name across rigs). Follow with Key Camera to commit"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return _xform_clipboard is not None
+
+    def execute(self, context):
+        clip = _xform_clipboard
+        if not clip:
+            self.report({"WARNING"}, "Nothing copied yet.")
+            return {"CANCELLED"}
+        st = context.scene.magicam_caddy
+        entry = _all_cameras().get(st.camera)
+        if not entry:
+            return {"CANCELLED"}
+        arm = entry[1]
+        prefix = st.camera.rsplit("MagiCam", 1)[0]
+
+        applied = 0
+        for pbone in arm.pose.bones:
+            suffix = _bone_suffix(pbone.name, prefix)
+            bone_entry = clip["bones"].get(suffix)
+            if bone_entry is None:
+                continue
+            _apply_bone_xform(pbone, bone_entry)
+            applied += 1
+
+        if clip.get("lens") is not None:
+            cam = mpc_scene.camera_object(st.camera)
+            if cam and cam.type == "CAMERA":
+                lens_mm = float(clip["lens"])
+                label = f"{int(round(lens_mm))}mm"
+                if label in _LENS_LABELS:
+                    st.lens = label  # reflect in the dropdown
+                cam.data.lens = lens_mm  # preserve exact value after enum update
+
+        context.view_layer.update()
+        self.report(
+            {"INFO"},
+            f"Pasted {applied} bone(s) + lens from {clip['source']} — "
+            f"hit Key Camera to commit.",
+        )
+        return {"FINISHED"}
+
+
 class MAGICAM_OT_caddy_jump_frame(bpy.types.Operator):
     bl_idname = "magicam.caddy_jump_frame"
     bl_label = "Jump To Frame"
@@ -313,6 +447,19 @@ class MAGICAM_PT_caddy(bpy.types.Panel):
                 op = crow.operator("magicam.caddy_select_control", text=label)
                 op.bone = f"{prefix}{suffix}"
                 op.tool = tool
+            # Copy/Paste the whole rig pose + lens between shot cameras.
+            xrow = col.row(align=True)
+            xrow.operator(
+                "magicam.caddy_copy_transforms", text="Copy", icon="COPYDOWN"
+            )
+            paste = xrow.row(align=True)
+            paste.enabled = _xform_clipboard is not None
+            paste.operator(
+                "magicam.caddy_paste_transforms", text="Paste", icon="PASTEDOWN"
+            )
+            if _xform_clipboard is not None:
+                src = _xform_clipboard.get("source", "")
+                col.label(text=f"Copied: {src}", icon="COPYDOWN")
             col.operator("magicam.caddy_key_camera", icon="KEY_HLT")
 
         layout.prop(st, "lens", text="Lens")
@@ -348,6 +495,8 @@ _classes = (
     MAGICAM_OT_caddy_select_control,
     MAGICAM_OT_caddy_camera_at_frame,
     MAGICAM_OT_caddy_key_camera,
+    MAGICAM_OT_caddy_copy_transforms,
+    MAGICAM_OT_caddy_paste_transforms,
     MAGICAM_OT_caddy_jump_frame,
     MAGICAM_OT_caddy_view_range,
     MAGICAM_OT_caddy_create_static,
