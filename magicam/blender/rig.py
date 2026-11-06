@@ -8,6 +8,7 @@ conventions (MagiCam camera, image_plane_01..10 / *_ctrl bones, utils, etc.).
 from __future__ import annotations
 
 import os
+import re
 
 import bpy
 
@@ -45,6 +46,110 @@ def append_camera_rig(
             bpy.context.scene.collection.children.link(appended_collection)
 
     return appended_collection
+
+
+# --- variable plane count --------------------------------------------------
+
+BUNDLED_PLANES = 10  # planes (and control bones) the bundled template ships with
+MAX_PLANES = 24  # hard cap; a clip with more layers is an error, not a silent skip
+PLANE_SPACING = 2.0  # rig units between neighbouring template planes
+
+
+def plane_count(prefix):
+    """How many ``<prefix>image_plane_NN`` mesh planes exist right now."""
+    pat = re.compile(rf"^{re.escape(prefix)}image_plane_\d+$")
+    return sum(1 for o in bpy.data.objects if o.type == "MESH" and pat.match(o.name))
+
+
+def _copy_rna(src, dst, skip=()):
+    for prop in src.bl_rna.properties:
+        if prop.is_readonly or prop.identifier in skip:
+            continue
+        try:
+            setattr(dst, prop.identifier, getattr(src, prop.identifier))
+        except (AttributeError, TypeError):
+            pass
+
+
+def _clone_control_bone(armature_obj, src_name, new_name, y_offset):
+    """Add bone *new_name* *y_offset* further back than *src_name*, with the same parent, display,
+    bone collections and location limit (whose floor moves with it)."""
+    view_layer = bpy.context.view_layer
+    prev_active = view_layer.objects.active
+    view_layer.objects.active = armature_obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        eb = armature_obj.data.edit_bones
+        src = eb[src_name]
+        new = eb.new(new_name)
+        # an exact clone, moved back (the rig spec's plane_slots rule)
+        new.head = (src.head.x, src.head.y + y_offset, src.head.z)
+        new.tail = (src.tail.x, src.tail.y + y_offset, src.tail.z)
+        new.roll = src.roll
+        new.parent = src.parent
+        new.use_connect = False
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+        view_layer.objects.active = prev_active
+
+    src_pb = armature_obj.pose.bones[src_name]
+    pb = armature_obj.pose.bones[new_name]
+    pb.rotation_mode = src_pb.rotation_mode
+    pb.custom_shape = src_pb.custom_shape
+    pb.custom_shape_scale_xyz = src_pb.custom_shape_scale_xyz
+    pb.custom_shape_translation = src_pb.custom_shape_translation
+    pb.custom_shape_rotation_euler = src_pb.custom_shape_rotation_euler
+    pb.custom_shape_transform = src_pb.custom_shape_transform
+    pb.use_custom_shape_bone_size = src_pb.use_custom_shape_bone_size
+    for coll in src_pb.bone.collections:
+        coll.assign(pb.bone)
+    for con in src_pb.constraints:
+        new_con = pb.constraints.new(con.type)
+        _copy_rna(con, new_con, skip=("name", "type"))
+        if con.type == "LIMIT_LOCATION":
+            new_con.min_y = con.min_y - y_offset  # reach the same distance from the camera
+
+
+def _clone_plane(src, prefix, number, armature_obj, bone_name):
+    new = src.copy()  # copies the drivers too, so it sizes itself to the camera's frustum
+    new.data = src.data.copy()
+    new.name = f"{prefix}image_plane_{number:02d}"
+    new.data.name = new.name
+    for coll in src.users_collection:
+        coll.objects.link(new)
+    new.location.y = src.location.y + PLANE_SPACING
+    for con in new.constraints:
+        if con.type == "ARMATURE":
+            for t in con.targets:
+                t.target = armature_obj
+                t.subtarget = bone_name
+    return new
+
+
+def ensure_plane_count(armature_obj, prefix, count):
+    """Grow the rig to *count* planes by cloning the last plane and its control bone.
+
+    Idempotent: a rig that already has *count* planes is left alone. Raises ValueError above
+    ``MAX_PLANES``.
+    """
+    if count > MAX_PLANES:
+        raise ValueError(
+            f"This clip has {count} layers but a MagiCam rig holds at most {MAX_PLANES} image "
+            "planes - group or ignore layers (Rename Layers) so fewer are exported."
+        )
+    have = plane_count(prefix)
+    if have == 0:
+        raise ValueError(f"No '{prefix}image_plane_NN' planes in the rig to clone")
+    for number in range(have + 1, count + 1):
+        src = bpy.data.objects[f"{prefix}image_plane_{number - 1:02d}"]
+        bone = f"{prefix}image_plane_{number:02d}_ctrl"
+        _clone_control_bone(
+            armature_obj,
+            f"{prefix}image_plane_{number - 1:02d}_ctrl",
+            bone,
+            PLANE_SPACING,
+        )
+        _clone_plane(src, prefix, number, armature_obj, bone)
 
 
 def hide_after_append(collection_object, prefix=""):
