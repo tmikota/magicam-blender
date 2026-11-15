@@ -48,6 +48,52 @@ def append_camera_rig(
     return appended_collection
 
 
+def place_rig_at_camera(rig_collection, armature, camera, target_matrix):
+    """Move the WHOLE rig so its camera lands on *target_matrix* (a world matrix).
+
+    The camera is driven by the rig's bones (Child-Of ``tilt``), so moving the armature
+    OBJECT carries it. The image planes, base and dolly are NOT children of the armature
+    (the planes follow their control bones through an Armature constraint, which only
+    deforms their own base position), so the same move is applied to those free objects
+    too: the rig keeps its own base / dolly / height / tilt pose and only its parking
+    spot changes. Returns the largest matrix-element error after the move (~0 when the
+    camera landed exactly)."""
+    bpy.context.view_layer.update()
+    move = target_matrix @ camera.matrix_world.inverted()
+    old = armature.matrix_world.copy()
+    armature.matrix_world = move @ old
+    for obj in rig_collection.all_objects:
+        if obj is armature or obj is camera or obj.parent is not None:
+            continue
+        obj.matrix_basis = move @ obj.matrix_basis
+    bpy.context.view_layer.update()
+    return max(
+        abs(camera.matrix_world[i][j] - target_matrix[i][j])
+        for i in range(4)
+        for j in range(4)
+    )
+
+
+def set_image_plane_depth(armature, camera, index, depth, prefix=""):
+    """Park image plane *index* (1-based) *depth* metres in front of *camera* by sliding
+    its control bone along the rig's forward axis. The control is parented to the tilt
+    bone, so the plane already faces the lens; its size is driven by the distance, so it
+    keeps filling the frame while it moves. Measured, not assumed: the distance along the
+    view axis is read back after the move (the control's own limit may stop it short).
+    Returns that measured depth."""
+    bone = armature.pose.bones[f"{prefix}image_plane_{index:02d}_ctrl"]
+    plane = bpy.data.objects[f"{prefix}image_plane_{index:02d}"]
+
+    def measured():
+        bpy.context.view_layer.update()
+        local = camera.matrix_world.inverted() @ plane.matrix_world.translation
+        return -local.z
+
+    for _ in range(3):  # converges in one step when the axis is linear
+        bone.location[1] += depth - measured()
+    return measured()
+
+
 # --- variable plane count --------------------------------------------------
 
 BUNDLED_PLANES = 10  # planes (and control bones) the bundled template ships with
