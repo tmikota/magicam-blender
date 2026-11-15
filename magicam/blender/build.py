@@ -91,13 +91,15 @@ def import_multicam_rig(
     }
     camera_planes = camera_data["cameras"][camera_name]["camera_planes"]
 
+    # one plane per layer: clone past the bundled 10 (raises above rig.MAX_PLANES)
+    rig.ensure_plane_count(armature_obj, prefix, len(export.clip.layers))
+
     json_dir = os.path.dirname(tvpaint_json)
     for i, layer in enumerate(export.clip.layers):
         image_plane_number = str(i + 1).zfill(2)
         image_plane_name = f"{prefix}image_plane_{image_plane_number}"
         imp_obj = image_plane.find_image_plane(image_plane_name)
         if not imp_obj:
-            # The bundled rig provides 10 planes; extra layers are skipped.
             print(f"No rig plane for layer #{i + 1} ('{layer.name}') — skipping.")
             continue
         if not layer.link:
